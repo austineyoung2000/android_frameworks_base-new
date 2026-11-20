@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -81,6 +82,10 @@ public class Clock extends TextView implements
 
     private static final String CLOCK_SUPER_PARCELABLE = "clock_super_parcelable";
     private static final String CURRENT_USER_ID = "current_user_id";
+    private static final String STATUS_BAR_CUSTOM_COLOR_ENABLED =
+            "system:status_bar_clock_custom_color_enabled";
+    private static final String STATUS_BAR_CUSTOM_COLOR =
+            "system:status_bar_clock_custom_color";
     private static final String SHOW_SECONDS = "show_seconds";
     private static final String VISIBILITY = "visibility";
 
@@ -139,6 +144,9 @@ public class Clock extends TextView implements
     private boolean mBoldStatusBarClock;
 
     private boolean mIsStatusBar;
+    private boolean mCustomClockColorEnabled;
+    private int mCustomClockColor = Color.WHITE;
+    private ColorStateList mClockThemeColors;
     private boolean useStaticColor = false;
     private int lastDynamicColor = -1;
 
@@ -182,6 +190,7 @@ public class Clock extends TextView implements
                 AM_PM_STYLE_GONE, UserHandle.USER_CURRENT);
             mIsStatusBar = a.getBoolean(R.styleable.Clock_isStatusBar, mIsStatusBar);
             mNonAdaptedColor = getCurrentTextColor();
+            mClockThemeColors = getTextColors();
         } finally {
             a.recycle();
         }
@@ -248,7 +257,9 @@ public class Clock extends TextView implements
                     STATUS_BAR_CLOCK_DATE_POSITION,
                     STATUS_BAR_CLOCK_DATE_FORMAT,
                     STATUS_BAR_CLOCK_PERIOD_SEPARATOR,
-                    STATUS_BAR_CLOCK_BOLD);
+                    STATUS_BAR_CLOCK_BOLD,
+                    STATUS_BAR_CUSTOM_COLOR_ENABLED,
+                    STATUS_BAR_CUSTOM_COLOR);
             mUserTracker.addCallback(mUserChangedCallback, mContext.getMainExecutor());
             mCurrentUserId = mUserTracker.getUserId();
         }
@@ -373,6 +384,14 @@ public class Clock extends TextView implements
                         TunerService.parseIntegerSwitch(newValue, false);
                 applyBoldClockStyle();
                 break;
+            case STATUS_BAR_CUSTOM_COLOR_ENABLED:
+                mCustomClockColorEnabled = TunerService.parseIntegerSwitch(newValue, false);
+                applyStatusBarClockColor();
+                break;
+            case STATUS_BAR_CUSTOM_COLOR:
+                mCustomClockColor = TunerService.parseInteger(newValue, Color.WHITE);
+                applyStatusBarClockColor();
+                break;
             default:
                 break;
         }
@@ -394,6 +413,32 @@ public class Clock extends TextView implements
         final int target = mBoldStatusBarClock ? (base | Typeface.BOLD) : base;
         if (tf.getStyle() != target) {
             setTypeface(Typeface.create(tf, target));
+        }
+    }
+
+    @Override
+    public void setTextColor(int color) {
+        setTextColor(ColorStateList.valueOf(color));
+    }
+
+    @Override
+    public void setTextColor(ColorStateList colors) {
+        if (mIsStatusBar && colors != null) {
+            mClockThemeColors = colors;
+            if (mCustomClockColorEnabled) {
+                super.setTextColor(ColorStateList.valueOf(mCustomClockColor));
+                return;
+            }
+        }
+        super.setTextColor(colors);
+    }
+
+    private void applyStatusBarClockColor() {
+        if (!mIsStatusBar) return;
+        if (mCustomClockColorEnabled) {
+            super.setTextColor(ColorStateList.valueOf(mCustomClockColor));
+        } else if (mClockThemeColors != null) {
+            super.setTextColor(mClockThemeColors);
         }
     }
 
