@@ -36,6 +36,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
@@ -71,8 +72,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
@@ -370,7 +374,9 @@ fun ContentScope.Tile(
                 accessibilityUiState = uiState.accessibilityUiState,
                 iconOnly = iconOnly,
                 isDualTarget = uiState.handlesToggleClick,
-                modifier = contentRevealModifier,
+                modifier = contentRevealModifier.then(qsTileStyleModifier(
+                    labelColors.tileStyle, uiState.visualState, tileShape
+                )),
             ) {
                 val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
                 if (iconOnly) {
@@ -527,6 +533,7 @@ private data class CustomLabelColors(
     val activeSecondary: Color?,
     val inactiveSecondary: Color?,
     val tileShape: Int,
+    val tileStyle: Int,
 )
 
 @Composable
@@ -556,6 +563,9 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
             tileShape = Settings.System.getIntForUser(
                 resolver, "qs_tile_shape", 0, UserHandle.USER_CURRENT
             ),
+            tileStyle = Settings.System.getIntForUser(
+                resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT
+            ),
         )
     }
     val colors = remember(context) { mutableStateOf(readColors()) }
@@ -570,7 +580,7 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_inactive_label_color_enabled", "qs_inactive_label_color",
             "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
             "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
-            "qs_tile_shape",
+            "qs_tile_shape", "qs_compose_tile_style",
         ).forEach { key ->
             resolver.registerContentObserver(
                 Settings.System.getUriFor(key), false, observer, UserHandle.USER_ALL
@@ -589,6 +599,57 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
         }
     }
     return colors.value
+}
+
+private fun qsTileStyleModifier(
+    style: Int,
+    state: Int,
+    shape: RoundedCornerShape,
+): Modifier {
+    if (style !in 1..7) return Modifier
+    val active = state == STATE_ACTIVE
+    val edge = if (active) Color.White.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.3f)
+    val styled = Modifier.drawWithContent {
+        when (style) {
+            // Reflected: soft shine across the upper part of the tile.
+            2 -> drawRect(Brush.verticalGradient(
+                0f to Color.White.copy(alpha = 0.32f),
+                0.48f to Color.White.copy(alpha = 0.03f),
+                1f to Color.Transparent
+            ))
+            // Shaded: darken the upper edge.
+            3 -> drawRect(Brush.verticalGradient(
+                listOf(Color.Black.copy(alpha = 0.25f), Color.Transparent)
+            ))
+            // Neumorph: opposing highlights and shadows.
+            5 -> drawRect(Brush.linearGradient(
+                listOf(Color.White.copy(alpha = 0.26f), Color.Transparent,
+                    Color.Black.copy(alpha = 0.22f))
+            ))
+            // CyberPunk: contrasting bands on opposite sides.
+            6 -> {
+                drawRect(Color.White.copy(alpha = 0.16f), size = Size(size.width * 0.55f, size.height))
+                drawRect(Color.Black.copy(alpha = 0.16f),
+                    topLeft = Offset(size.width * 0.58f, 0f),
+                    size = Size(size.width * 0.42f, size.height))
+            }
+            // Two-tone accent: a distinct second tone within the tile.
+            7 -> drawRect(Brush.horizontalGradient(
+                listOf(Color.White.copy(alpha = 0.16f), Color.Transparent,
+                    Color.Black.copy(alpha = 0.14f))
+            ))
+        }
+        drawContent()
+    }
+    return when (style) {
+        1 -> styled.border(2.dp, edge, shape)
+        2 -> styled.border(1.dp, edge.copy(alpha = 0.18f), shape)
+        3 -> styled
+        4 -> styled.border(1.dp, edge, shape)
+        5 -> styled.border(1.dp, edge.copy(alpha = 0.28f), shape)
+        6 -> styled.border(2.dp, edge, shape)
+        else -> styled
+    }
 }
 
 private object TileDefaults {
