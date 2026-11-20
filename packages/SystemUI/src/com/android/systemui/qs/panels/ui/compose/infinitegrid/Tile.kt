@@ -250,7 +250,18 @@ fun ContentScope.Tile(
             }
         }
         
-        val tileShape by TileDefaults.animateTileShapeAsState(state = uiState.visualState, iconOnly = iconOnly)
+        val stockTileShape by TileDefaults.animateTileShapeAsState(
+            state = uiState.visualState, iconOnly = iconOnly
+        )
+        val tileShape = when (labelColors.tileShape) {
+            1 -> RoundedCornerShape(0.dp)
+            2 -> RoundedCornerShape(14.dp)
+            3 -> RoundedCornerShape(
+                topStart = 24.dp, topEnd = 2.dp, bottomEnd = 24.dp, bottomStart = 2.dp
+            )
+            4 -> RoundedCornerShape(50)
+            else -> stockTileShape
+        }
         val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
 
         val surfaceRevealModifier: Modifier
@@ -515,6 +526,7 @@ private data class CustomLabelColors(
     val inactive: Color?,
     val activeSecondary: Color?,
     val inactiveSecondary: Color?,
+    val tileShape: Int,
 )
 
 @Composable
@@ -541,6 +553,9 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
                 "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
                 0xffffffff.toInt()
             ),
+            tileShape = Settings.System.getIntForUser(
+                resolver, "qs_tile_shape", 0, UserHandle.USER_CURRENT
+            ),
         )
     }
     val colors = remember(context) { mutableStateOf(readColors()) }
@@ -555,6 +570,7 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_inactive_label_color_enabled", "qs_inactive_label_color",
             "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
             "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
+            "qs_tile_shape",
         ).forEach { key ->
             resolver.registerContentObserver(
                 Settings.System.getUriFor(key), false, observer, UserHandle.USER_ALL
