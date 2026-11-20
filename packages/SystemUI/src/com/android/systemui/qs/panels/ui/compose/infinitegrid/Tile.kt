@@ -19,6 +19,14 @@
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import android.content.res.Resources
 import android.os.Trace
 import android.service.quicksettings.Tile.STATE_ACTIVE
@@ -50,6 +58,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -204,7 +213,18 @@ fun ContentScope.Tile(
                 tile.state.collect { value = it.toIconProvider() }
             }
 
-        val colors = TileDefaults.getColorForState(uiState, iconOnly)
+        val defaultColors = TileDefaults.getColorForState(uiState, iconOnly)
+        val labelColors = rememberCustomLabelColors()
+        val customLabel = when (uiState.visualState) {
+            STATE_ACTIVE -> labelColors.active
+            STATE_INACTIVE -> labelColors.inactive
+            else -> null
+        }
+        val colors = if (customLabel != null && !iconOnly) {
+            defaultColors.copy(label = customLabel, secondaryLabel = customLabel)
+        } else {
+            defaultColors
+        }
         val hapticsViewModel: TileHapticsViewModel =
             rememberViewModel(traceName = "TileHapticsViewModel") {
                 tileHapticsViewModelFactory.create(tile)
@@ -481,6 +501,56 @@ data class TileColors(
     val secondaryLabel: Color,
     val icon: Color,
 )
+
+private data class CustomLabelColors(val active: Color?, val inactive: Color?)
+
+@Composable
+private fun rememberCustomLabelColors(): CustomLabelColors {
+    val context = LocalContext.current
+    val resolver = context.contentResolver
+    fun readColors(): CustomLabelColors {
+        fun color(enabledKey: String, colorKey: String, fallback: Int): Color? {
+            val enabled = Settings.System.getIntForUser(
+                resolver, enabledKey, 0, UserHandle.USER_CURRENT
+            ) != 0
+            return if (enabled) Color(Settings.System.getIntForUser(
+                resolver, colorKey, fallback, UserHandle.USER_CURRENT
+            )) else null
+        }
+        return CustomLabelColors(
+            active = color("qs_active_label_color_enabled", "qs_active_label_color", 0xff000000.toInt()),
+            inactive = color("qs_inactive_label_color_enabled", "qs_inactive_label_color", 0xffffffff.toInt()),
+        )
+    }
+    val colors = remember(context) { mutableStateOf(readColors()) }
+    DisposableEffect(context) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                colors.value = readColors()
+            }
+        }
+        listOf(
+            "qs_active_label_color_enabled", "qs_active_label_color",
+            "qs_inactive_label_color_enabled", "qs_inactive_label_color",
+        ).forEach { key ->
+            resolver.registerContentObserver(
+                Settings.System.getUriFor(key), false, observer, UserHandle.USER_ALL
+            )
+        }
+        val userReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                colors.value = readColors()
+            }
+        }
+        context.registerReceiver(userReceiver, IntentFilter(Intent.ACTION_USER_SWITCHED))
+        colors.value = readColors()
+        onDispose {
+            resolver.unregisterContentObserver(observer)
+            context.unregisterReceiver(userReceiver)
+        }
+    }
+    return colors.value
+}
 
 private object TileDefaults {
     val ActiveIconCornerRadius = ActiveCornerRadius
