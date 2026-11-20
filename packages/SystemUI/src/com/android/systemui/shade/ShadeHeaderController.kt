@@ -154,6 +154,8 @@ constructor(
             "system:" + Settings.System.NETWORK_TRAFFIC_ENABLED
         internal val QS_HEADER_CLOCK_STYLE =
             "system:" + "qs_header_clock_style"
+        private const val QS_CLOCK_COLOR_ENABLED = "system:qs_header_clock_color_enabled"
+        private const val QS_CLOCK_COLOR = "system:qs_header_clock_color"
 
         private fun Int.stateToString() =
             when (this) {
@@ -167,6 +169,8 @@ constructor(
     var shadeCollapseAction: Runnable? = null
 
     private var qsClockStyle = 0
+    private var qsClockColorEnabled = false
+    private var qsClockColor = android.graphics.Color.WHITE
 
     private lateinit var iconManager: TintedIconManager
     private lateinit var carrierIconSlots: List<String>
@@ -380,10 +384,17 @@ constructor(
         }
 
     fun updateQsHeaderClockDateVisibility() {
-        val color = if (qsClockStyle != 0) android.graphics.Color.TRANSPARENT else getFgColor()
-        val colorStateList = ColorStateList.valueOf(color)
-        clock.setTextColor(colorStateList)
-        date.setTextColor(colorStateList) 
+        val hidden = qsClockStyle != 0
+        val clockColor = when {
+            hidden -> android.graphics.Color.TRANSPARENT
+            qsClockColorEnabled -> qsClockColor
+            else -> getFgColor()
+        }
+        clock.setStaticColor(hidden || qsClockColorEnabled)
+        clock.setTextColor(ColorStateList.valueOf(clockColor))
+        date.setTextColor(ColorStateList.valueOf(
+            if (hidden) android.graphics.Color.TRANSPARENT else getFgColor()
+        ))
     }
 
     override fun onInit() {
@@ -482,7 +493,7 @@ constructor(
         tunerService.addTunable(this, NETWORK_TRAFFIC_ENABLED)
 
         updateQsHeaderClockDateVisibility()
-        tunerService.addTunable(this, QS_HEADER_CLOCK_STYLE)
+        tunerService.addTunable(this, QS_HEADER_CLOCK_STYLE, QS_CLOCK_COLOR_ENABLED, QS_CLOCK_COLOR)
     }
 
     override fun onViewDetached() {
@@ -508,6 +519,16 @@ constructor(
 
             QS_HEADER_CLOCK_STYLE -> {
                 qsClockStyle = TunerService.parseInteger(value, 0)
+                updateQsHeaderClockDateVisibility()
+            }
+
+            QS_CLOCK_COLOR_ENABLED -> {
+                qsClockColorEnabled = TunerService.parseIntegerSwitch(value, false)
+                updateQsHeaderClockDateVisibility()
+            }
+
+            QS_CLOCK_COLOR -> {
+                qsClockColor = TunerService.parseInteger(value, android.graphics.Color.WHITE)
                 updateQsHeaderClockDateVisibility()
             }
 
@@ -570,6 +591,7 @@ constructor(
         )
         iconManager.setTint(getFgColor(), getBgColor())
         iconContainer.setNetworkTrafficColor(getFgColor())
+        updateQsHeaderClockDateVisibility()
     }
 
     private fun updateCarrierGroupPadding() {
