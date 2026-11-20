@@ -374,9 +374,9 @@ fun ContentScope.Tile(
                 accessibilityUiState = uiState.accessibilityUiState,
                 iconOnly = iconOnly,
                 isDualTarget = uiState.handlesToggleClick,
-                modifier = contentRevealModifier.then(qsTileStyleModifier(
-                    labelColors.tileStyle, uiState.visualState, tileShape
-                )),
+                modifier = contentRevealModifier
+                    .then(qsTileBackgroundModifier(labelColors, uiState.visualState))
+                    .then(qsTileStyleModifier(labelColors.tileStyle, uiState.visualState, tileShape)),
             ) {
                 val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
                 if (iconOnly) {
@@ -534,6 +534,9 @@ private data class CustomLabelColors(
     val inactiveSecondary: Color?,
     val tileShape: Int,
     val tileStyle: Int,
+    val activeBackground: Color?,
+    val activeGradientEnd: Color?,
+    val inactiveBackground: Color?,
 )
 
 @Composable
@@ -566,6 +569,18 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
             tileStyle = Settings.System.getIntForUser(
                 resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT
             ),
+            activeBackground = color(
+                "qs_active_background_color_enabled", "qs_active_background_color",
+                0xff6200ee.toInt()
+            ),
+            activeGradientEnd = color(
+                "qs_active_gradient_enabled", "qs_active_gradient_end_color",
+                0xff0000ff.toInt()
+            ),
+            inactiveBackground = color(
+                "qs_inactive_background_color_enabled", "qs_inactive_background_color",
+                0xff55555f.toInt()
+            ),
         )
     }
     val colors = remember(context) { mutableStateOf(readColors()) }
@@ -581,6 +596,9 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
             "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
             "qs_tile_shape", "qs_compose_tile_style",
+            "qs_active_background_color_enabled", "qs_active_background_color",
+            "qs_active_gradient_enabled", "qs_active_gradient_end_color",
+            "qs_inactive_background_color_enabled", "qs_inactive_background_color",
         ).forEach { key ->
             resolver.registerContentObserver(
                 Settings.System.getUriFor(key), false, observer, UserHandle.USER_ALL
@@ -599,6 +617,27 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
         }
     }
     return colors.value
+}
+
+/**
+ * Draw custom fills inside the tile's existing shape and beneath its style and content.
+ * Disabled and unavailable tiles retain the colors selected by SystemUI.
+ */
+private fun qsTileBackgroundModifier(settings: CustomLabelColors, state: Int): Modifier {
+    val start = when (state) {
+        STATE_ACTIVE -> settings.activeBackground
+        STATE_INACTIVE -> settings.inactiveBackground
+        else -> null
+    } ?: return Modifier
+
+    val end = if (state == STATE_ACTIVE) settings.activeGradientEnd else null
+    return Modifier.drawBehind {
+        if (end != null) {
+            drawRect(brush = Brush.horizontalGradient(listOf(start, end)))
+        } else {
+            drawRect(color = start)
+        }
+    }
 }
 
 private fun qsTileStyleModifier(
