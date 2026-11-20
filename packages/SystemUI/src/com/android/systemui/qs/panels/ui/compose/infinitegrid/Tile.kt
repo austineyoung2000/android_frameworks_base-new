@@ -220,8 +220,16 @@ fun ContentScope.Tile(
             STATE_INACTIVE -> labelColors.inactive
             else -> null
         }
-        val colors = if (customLabel != null && !iconOnly) {
-            defaultColors.copy(label = customLabel, secondaryLabel = customLabel)
+        val customSecondaryLabel = when (uiState.visualState) {
+            STATE_ACTIVE -> labelColors.activeSecondary
+            STATE_INACTIVE -> labelColors.inactiveSecondary
+            else -> null
+        }
+        val colors = if (!iconOnly) {
+            defaultColors.copy(
+                label = customLabel ?: defaultColors.label,
+                secondaryLabel = customSecondaryLabel ?: defaultColors.secondaryLabel,
+            )
         } else {
             defaultColors
         }
@@ -502,7 +510,12 @@ data class TileColors(
     val icon: Color,
 )
 
-private data class CustomLabelColors(val active: Color?, val inactive: Color?)
+private data class CustomLabelColors(
+    val active: Color?,
+    val inactive: Color?,
+    val activeSecondary: Color?,
+    val inactiveSecondary: Color?,
+)
 
 @Composable
 private fun rememberCustomLabelColors(): CustomLabelColors {
@@ -520,6 +533,14 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
         return CustomLabelColors(
             active = color("qs_active_label_color_enabled", "qs_active_label_color", 0xff000000.toInt()),
             inactive = color("qs_inactive_label_color_enabled", "qs_inactive_label_color", 0xffffffff.toInt()),
+            activeSecondary = color(
+                "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
+                0xff000000.toInt()
+            ),
+            inactiveSecondary = color(
+                "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
+                0xffffffff.toInt()
+            ),
         )
     }
     val colors = remember(context) { mutableStateOf(readColors()) }
@@ -532,6 +553,8 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
         listOf(
             "qs_active_label_color_enabled", "qs_active_label_color",
             "qs_inactive_label_color_enabled", "qs_inactive_label_color",
+            "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
+            "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
         ).forEach { key ->
             resolver.registerContentObserver(
                 Settings.System.getUriFor(key), false, observer, UserHandle.USER_ALL
