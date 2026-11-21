@@ -132,6 +132,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
@@ -242,6 +244,7 @@ import com.android.systemui.qs.panels.shared.model.SectionConfig
 import com.android.systemui.qs.panels.shared.model.SectionType
 import com.android.systemui.qs.panels.shared.model.QSLayoutItem
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.FullScreenTilePicker
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalCollapsedRows
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSCompactMode
@@ -1272,6 +1275,19 @@ constructor(
     @Composable
     private fun ContentScope.QuickSettingsElement(oneUiTileStore: OneUiTileStore, modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
+        val actionColors = rememberCustomLabelColors()
+        val actionColor = actionColors.inactiveBackground ?: actionColors.activeBackground
+        val actionEndColor = if (actionColors.inactiveBackground != null)
+            actionColors.inactiveGradientEnd else actionColors.activeGradientEnd
+        val actionBrush = actionColor?.let { start ->
+            if (actionEndColor != null) Brush.horizontalGradient(listOf(start, actionEndColor))
+            else SolidColor(start)
+        }
+        val actionIconTint = actionColor?.let { start ->
+            val luminance = if (actionEndColor == null) start.luminance()
+                else (start.luminance() + actionEndColor.luminance()) / 2f
+            if (luminance > 0.5f) Color.Black else Color.White
+        }
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -1408,10 +1424,12 @@ constructor(
                                     if (!isEditingSections) {
                                         FooterActions(
                                             viewModel = viewModel.footerActionsViewModel,
+                                            actionButtonBrush = actionBrush,
+                                            actionButtonIconColor = actionIconTint,
                                         )
 
                                         val backgroundColor = LocalAndroidColorScheme.current.surfaceEffect1
-                                        val iconTint = MaterialTheme.colorScheme.onSurface
+                                        val iconTint = actionIconTint ?: MaterialTheme.colorScheme.onSurface
 
                                         Box(
                                             contentAlignment = Alignment.Center,
@@ -1420,7 +1438,7 @@ constructor(
                                                 .size(40.dp)
                                                 .clip(CircleShape)
                                                 .background(
-                                                    backgroundColor,
+                                                    actionBrush ?: SolidColor(backgroundColor),
                                                     CircleShape
                                                 )
                                                 .clickable(

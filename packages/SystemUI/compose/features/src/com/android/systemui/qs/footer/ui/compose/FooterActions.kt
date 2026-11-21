@@ -23,6 +23,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.indication
@@ -52,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -116,7 +118,12 @@ fun ContentScope.FooterActionsWithAnimatedVisibility(
 
 /** The Quick Settings footer actions row. */
 @Composable
-fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifier) {
+fun FooterActions(
+    viewModel: FooterActionsViewModel,
+    modifier: Modifier = Modifier,
+    actionButtonBrush: Brush? = null,
+    actionButtonIconColor: Color? = null,
+) {
     val context = LocalContext.current
 
     // Collect alpha as soon as we are composed, even when not visible.
@@ -180,11 +187,15 @@ fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifi
                 { settings },
                 useModifierBasedExpandable,
                 Modifier.sysuiResTag("settings_button_container"),
+                actionButtonBrush,
+                actionButtonIconColor,
             )
             IconButton(
                 { viewModel.power },
                 useModifierBasedExpandable,
                 Modifier.sysuiResTag("pm_lite"),
+                actionButtonBrush,
+                actionButtonIconColor,
             )
         }
     }
@@ -227,9 +238,11 @@ private fun IconButton(
     model: () -> FooterActionsButtonViewModel?,
     useModifierBasedExpandable: Boolean,
     modifier: Modifier = Modifier,
+    actionButtonBrush: Brush? = null,
+    actionButtonIconColor: Color? = null,
 ) {
     val viewModel = model() ?: return
-    IconButton(viewModel, useModifierBasedExpandable, modifier)
+    IconButton(viewModel, useModifierBasedExpandable, modifier, actionButtonBrush, actionButtonIconColor)
 }
 
 /** A button with an icon. */
@@ -238,6 +251,8 @@ private fun IconButton(
     model: FooterActionsButtonViewModel,
     useModifierBasedExpandable: Boolean,
     modifier: Modifier = Modifier,
+    actionButtonBrush: Brush? = null,
+    actionButtonIconColor: Color? = null,
 ) {
     val colors = buttonColorsForModel(model)
     CircleExpandable(
@@ -247,7 +262,17 @@ private fun IconButton(
         modifier = modifier,
         useModifierBasedImplementation = useModifierBasedExpandable,
     ) {
-        FooterIcon(model.icon, Modifier.size(20.dp), colors.icon)
+        if (actionButtonBrush == null) {
+            FooterIcon(model.icon, Modifier.size(20.dp), colors.icon)
+        } else {
+            Box(
+                modifier = Modifier.size(FooterActionsDefaults.FooterButtonHeight)
+                    .background(actionButtonBrush, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                FooterIcon(model.icon, Modifier.size(20.dp), actionButtonIconColor ?: colors.icon)
+            }
+        }
     }
 }
 

@@ -161,6 +161,7 @@ constructor(
         private const val QS_DATE_COLOR = "system:qs_header_date_color"
         private const val SYSTEM_ICON_COLOR_ENABLED = "system:status_bar_system_icon_color_enabled"
         private const val SYSTEM_ICON_COLOR = "system:status_bar_system_icon_color"
+        private const val QS_EXPANDED_ICON_POSITION = "system:qs_expanded_icon_position"
 
         private fun Int.stateToString() =
             when (this) {
@@ -180,6 +181,7 @@ constructor(
     private var qsDateColor = android.graphics.Color.WHITE
     private var systemIconColorEnabled = false
     private var systemIconColor = android.graphics.Color.WHITE
+    private var expandedIconPosition = 40
 
     private lateinit var iconManager: TintedIconManager
     private lateinit var carrierIconSlots: List<String>
@@ -509,7 +511,8 @@ constructor(
         updateQsHeaderClockDateVisibility()
         tunerService.addTunable(
             this, QS_HEADER_CLOCK_STYLE, QS_CLOCK_COLOR_ENABLED, QS_CLOCK_COLOR,
-            QS_DATE_COLOR_ENABLED, QS_DATE_COLOR, SYSTEM_ICON_COLOR_ENABLED, SYSTEM_ICON_COLOR
+            QS_DATE_COLOR_ENABLED, QS_DATE_COLOR, SYSTEM_ICON_COLOR_ENABLED, SYSTEM_ICON_COLOR,
+            QS_EXPANDED_ICON_POSITION
         )
     }
 
@@ -557,6 +560,11 @@ constructor(
             QS_DATE_COLOR -> {
                 qsDateColor = TunerService.parseInteger(value, android.graphics.Color.WHITE)
                 updateQsHeaderClockDateVisibility()
+            }
+
+            QS_EXPANDED_ICON_POSITION -> {
+                expandedIconPosition = TunerService.parseInteger(value, 40).coerceIn(0, 80)
+                updateExpandedIconPosition()
             }
 
             SYSTEM_ICON_COLOR_ENABLED -> {
@@ -616,6 +624,14 @@ constructor(
         header
             .getConstraintSet(LARGE_SCREEN_HEADER_CONSTRAINT)
             .load(context, resources.getXml(R.xml.large_screen_shade_header))
+        updateExpandedIconPosition()
+    }
+
+    private fun updateExpandedIconPosition() {
+        val constraints = header.getConstraintSet(QS_HEADER_CONSTRAINT) ?: return
+        val offsetPx = (expandedIconPosition - 40) * resources.displayMetrics.density
+        constraints.setTranslationY(R.id.shade_header_system_icons, offsetPx)
+        header.updateState(QS_HEADER_CONSTRAINT, constraints)
     }
 
     private fun updateColors() {
