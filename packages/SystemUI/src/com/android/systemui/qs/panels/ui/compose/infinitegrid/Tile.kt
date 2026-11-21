@@ -650,7 +650,7 @@ internal fun qsTileBackgroundModifier(settings: CustomLabelColors, state: Int): 
     }
 }
 
-private fun qsTileStyleModifier(
+internal fun qsTileStyleModifier(
     style: Int,
     state: Int,
     shape: RoundedCornerShape,

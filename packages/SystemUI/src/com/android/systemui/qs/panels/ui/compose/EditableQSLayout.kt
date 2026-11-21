@@ -156,6 +156,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.EditModeTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.SectionEditModeViewModel
 import com.android.systemui.qs.pipeline.domain.model.TileModel
@@ -2112,6 +2113,9 @@ fun DraggableTile(
                     modifier = Modifier
                         .fillMaxSize()
                         .then(qsTileBackgroundModifier(customTileColors, visualState))
+                        .then(qsTileStyleModifier(
+                            customTileColors.tileStyle, visualState, RoundedCornerShape(InactiveCornerRadius)
+                        ))
                         .combinedClickable(
                             enabled = !isEditMode && interactionsEnabled,
                             onClick = { onClick(expandable) },
@@ -2229,6 +2233,10 @@ fun DraggableTile(
                             Row(
                                 modifier = Modifier.fillMaxSize()
                                     .clip(RoundedCornerShape(percent = 50))
+                                    .then(qsTileStyleModifier(
+                                        customTileColors.tileStyle, visualState,
+                                        RoundedCornerShape(percent = 50)
+                                    ))
                                     .combinedClickable(
                                         enabled     = !isEditMode && interactionsEnabled,
                                         onClick     = { onClick(expandable) },
