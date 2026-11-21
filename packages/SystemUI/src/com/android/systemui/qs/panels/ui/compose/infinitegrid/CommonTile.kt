@@ -67,7 +67,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorProducer
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.DefaultAlpha
 import androidx.compose.ui.graphics.TransformOrigin
@@ -232,13 +231,13 @@ fun LargeTileLabels(
         TileLabel(
             text = label,
             style = MaterialTheme.typography.titleSmallEmphasized,
-            color = { animatedLabelColor },
+            color = animatedLabelColor,
             isVisible = isVisible,
         )
         if (!TextUtils.isEmpty(secondaryLabel)) {
             TileLabel(
                 secondaryLabel ?: "",
-                color = { animatedSecondaryLabelColor },
+                color = animatedSecondaryLabelColor,
                 style = MaterialTheme.typography.labelMedium,
                 isVisible = isVisible,
                 modifier =
@@ -330,7 +329,7 @@ fun SmallTileContent(
 @Composable
 private fun TileLabel(
     text: String,
-    color: ColorProducer,
+    color: Color,
     style: TextStyle,
     modifier: Modifier = Modifier,
     isVisible: () -> Boolean = { true },
@@ -341,8 +340,7 @@ private fun TileLabel(
 
     BasicText(
         text = text,
-        color = color,
-        style = style,
+        style = style.copy(color = color),
         maxLines = 1,
         onTextLayout = { textSize = it.size.width },
         modifier =
