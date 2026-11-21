@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.pipeline.battery.shared.ui
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import com.android.systemui.statusbar.pipeline.battery.shared.ui.BatteryColors.LightTheme.Charging
 import com.android.systemui.statusbar.pipeline.battery.shared.ui.BatteryColors.LightTheme.Error
 import com.android.systemui.statusbar.pipeline.battery.shared.ui.BatteryColors.LightTheme.PowerSave
@@ -40,6 +41,15 @@ sealed interface BatteryColors {
 
     /** The layered attribution. Should match the tint of other status bar icons */
     val attribution: Color
+
+    /** Custom status bar tint with contrast for glyphs drawn over the battery fill. */
+    data class Custom(private val color: Color) : BatteryColors {
+        override val glyph = if (color.luminance() > 0.5f) Color.Black else Color.White
+        override val fill = color
+        override val backgroundOnly = color.copy(alpha = 0.25f)
+        override val backgroundWithGlyph = color.copy(alpha = 0.55f)
+        override val attribution = color
+    }
 
     /**
      * Light theme: light background, dark icons

@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -50,6 +51,7 @@ fun BatteryWithPercent(
     modifier: Modifier = Modifier,
     showPercent: Boolean = true,
     showEstimate: Boolean = false,
+    customColor: Color? = null,
 ) {
     val batteryHeight =
         with(LocalDensity.current) {
@@ -72,7 +74,7 @@ fun BatteryWithPercent(
     var bounds by remember { mutableStateOf(Rect()) }
 
     val colorProducer = {
-        if (isDarkProvider().isDarkTheme(bounds)) {
+        customColor ?: if (isDarkProvider().isDarkTheme(bounds)) {
             BatteryColors.DarkTheme.Default.fill
         } else {
             BatteryColors.LightTheme.Default.fill
@@ -92,6 +94,7 @@ fun BatteryWithPercent(
             UnifiedBattery(
                 viewModel = viewModel,
                 isDarkProvider = isDarkProvider,
+                customColor = customColor,
                 modifier = Modifier.height(batteryHeight).wrapContentWidth(),
             )
         }

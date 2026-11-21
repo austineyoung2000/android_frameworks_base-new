@@ -128,6 +128,8 @@ class CustomClockViewStub @JvmOverloads constructor(
             3 -> if (view is ViewGroup && view.childCount > 0) {
                 colorClockViews(view.getChildAt(0))
             }
+            // Simple uses separate TextClocks for hours/minutes and seconds.
+            4 -> colorClockViews(view)
         }
     }
 
