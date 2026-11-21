@@ -1834,6 +1834,7 @@ constructor(
                     if (isDraggingBrightness) alpha = 1f 
                 }) {
                     BrightnessSliderContainer(
+                        customizeAppearance = true,
                         viewModel =
                             viewModel.containerViewModel.brightnessSliderViewModel,
                         containerColors =

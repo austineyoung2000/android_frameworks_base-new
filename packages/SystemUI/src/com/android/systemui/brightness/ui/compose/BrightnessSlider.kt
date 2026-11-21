@@ -63,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -116,6 +117,7 @@ fun BrightnessSlider(
     hapticsViewModelFactory: SliderHapticsViewModel.Factory,
     dimensions: BrightnessSliderDimensions = BrightnessSliderDimensions.Default,
     isVertical: Boolean = false,
+    customizeAppearance: Boolean = false,
 ) {
     val floatValueRange = valueRange.first.toFloat()..valueRange.last.toFloat()
     val isRestricted = restriction is PolicyRestriction.Restricted
@@ -190,7 +192,8 @@ fun BrightnessSlider(
             onInteraction = onInteraction,
             enabled = enabled,
             painter = sliderPainter,
-            isVertical = isVertical
+            isVertical = isVertical,
+            customizeAppearance = customizeAppearance,
         )
     }
 
@@ -288,7 +291,15 @@ fun GlassSliderCore(
     enabled: Boolean,
     painter: Painter,
     isVertical: Boolean,
+    customizeAppearance: Boolean = false,
 ) {
+    val appearance = if (customizeAppearance) rememberBrightnessAppearance()
+        else BrightnessAppearance()
+    val defaultFill = MaterialTheme.colorScheme.primary
+    val defaultTrack = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val sliderIconTint = appearance.fill?.let {
+        if (it.luminance() > 0.5f) Color.Black else Color.White
+    } ?: MaterialTheme.colorScheme.onPrimary
     var dragFraction by remember { mutableStateOf<Float?>(null) }
     val rawFraction = ((value - valueRange.start) /
             (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
@@ -303,7 +314,11 @@ fun GlassSliderCore(
         modifier = Modifier
             .fillMaxSize()
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .then(if (appearance.customized) {
+                Modifier.brightnessAppearance(appearance, fraction, isVertical, defaultFill, defaultTrack)
+            } else {
+                Modifier.background(defaultTrack)
+            })
             .pointerInput(enabled, isVertical, valueRange) {
                 if (!enabled) return@pointerInput
                 detectTapGestures { offset ->
@@ -369,13 +384,15 @@ fun GlassSliderCore(
         val fillFraction = if (totalDim > 0) fillDim / totalDim.toFloat() else 0f
 
         if (isVertical) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(fillFraction)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-            )
+            if (!appearance.customized) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(fillFraction)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                )
+            }
 
             Box(
                 modifier = Modifier
@@ -387,18 +404,20 @@ fun GlassSliderCore(
                 Icon(
                     painter = painter,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                    tint = sliderIconTint,
                     modifier = Modifier.size(20.dp),
                 )
             }
         } else {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxWidth(fillFraction)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-            )
+            if (!appearance.customized) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(fillFraction)
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                )
+            }
 
             Box(
                 modifier = Modifier
@@ -410,7 +429,7 @@ fun GlassSliderCore(
                 Icon(
                     painter = painter,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                    tint = sliderIconTint,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -424,6 +443,7 @@ fun BrightnessSliderContainer(
     modifier: Modifier = Modifier,
     containerColors: ContainerColors,
     dimensions: BrightnessSliderDimensions = BrightnessSliderDimensions.Default,
+    customizeAppearance: Boolean = false,
 ) {
     val gamma = viewModel.currentBrightness.value
     if (gamma == BrightnessSliderViewModel.initialValue.value) {
@@ -515,7 +535,8 @@ fun BrightnessSliderContainer(
                 )
             },
             dimensions = dimensions,
-            isVertical = false
+            isVertical = false,
+            customizeAppearance = customizeAppearance,
         )
     }
 }
