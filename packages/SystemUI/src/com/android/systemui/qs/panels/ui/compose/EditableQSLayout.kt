@@ -154,6 +154,8 @@ import com.android.systemui.qs.panels.shared.model.SectionConfig
 import com.android.systemui.qs.panels.shared.model.SectionType
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.InactiveCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.EditModeTileDefaults
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.SectionEditModeViewModel
 import com.android.systemui.qs.pipeline.domain.model.TileModel
@@ -1943,6 +1945,28 @@ fun DraggableTile(
     val label = state?.label ?: fallbackEditTile?.label?.text ?: fallbackCustomLabel ?: tile.spec.spec
     val summary = state?.secondaryLabel?.toString()?.trim()?.takeIf { it.isNotEmpty() }
     val isActive = state?.state == Tile.STATE_ACTIVE
+    val customTileColors = rememberCustomLabelColors()
+    // Keep policy-disabled or unavailable tiles on their normal colors.
+    val visualState = if (state?.disabledByPolicy == true) {
+        Tile.STATE_UNAVAILABLE
+    } else {
+        state?.state ?: Tile.STATE_UNAVAILABLE
+    }
+    val customBackground = when (visualState) {
+        Tile.STATE_ACTIVE -> customTileColors.activeBackground
+        Tile.STATE_INACTIVE -> customTileColors.inactiveBackground
+        else -> null
+    }
+    val customPrimaryLabel = when (visualState) {
+        Tile.STATE_ACTIVE -> customTileColors.active
+        Tile.STATE_INACTIVE -> customTileColors.inactive
+        else -> null
+    }
+    val customSecondaryLabel = when (visualState) {
+        Tile.STATE_ACTIVE -> customTileColors.activeSecondary
+        Tile.STATE_INACTIVE -> customTileColors.inactiveSecondary
+        else -> null
+    }
     val isSquare = tile.spanCols == tile.spanRows
     val isPill   = !isSquare
     val isDark   = isSystemInDarkTheme()
@@ -2062,7 +2086,8 @@ fun DraggableTile(
             val aospColors = EditModeTileDefaults.editTileColors()
             val aospBackground = if (isActive) MaterialTheme.colorScheme.primary else aospColors.background
             val aospIconColor = if (isActive) MaterialTheme.colorScheme.onPrimary else aospColors.icon
-            val aospLabelColor = if (isActive) MaterialTheme.colorScheme.onPrimary else aospColors.label
+            val aospLabelColor =
+                customPrimaryLabel ?: if (isActive) MaterialTheme.colorScheme.onPrimary else aospColors.label
 
             Expandable(
                 controller = expandableController,
@@ -2086,6 +2111,7 @@ fun DraggableTile(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .then(qsTileBackgroundModifier(customTileColors, visualState))
                         .combinedClickable(
                             enabled = !isEditMode && interactionsEnabled,
                             onClick = { onClick(expandable) },
@@ -2184,7 +2210,8 @@ fun DraggableTile(
                         }
                     } else {
                         BoxWithConstraints(
-                            modifier         = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxSize()
+                                .then(qsTileBackgroundModifier(customTileColors, visualState)),
                             contentAlignment = Alignment.Center
                         ) {
                             val tileWidth    = maxWidth
@@ -2193,9 +2220,11 @@ fun DraggableTile(
                             val iconContainerSize = minDimension * 0.72f
                             val iconSize          = 28.dp
 
-                            Box(modifier = Modifier.fillMaxSize()
-                                .background(tileBackgroundColor, RoundedCornerShape(percent = 50))
-                                .blur(16.dp))
+                            if (customBackground == null) {
+                                Box(modifier = Modifier.fillMaxSize()
+                                    .background(tileBackgroundColor, RoundedCornerShape(percent = 50))
+                                    .blur(16.dp))
+                            }
 
                             Row(
                                 modifier = Modifier.fillMaxSize()
@@ -2213,9 +2242,11 @@ fun DraggableTile(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Box(modifier = Modifier.size(iconContainerSize), contentAlignment = Alignment.Center) {
-                                        Box(modifier = Modifier.fillMaxSize()
-                                            .background(iconContainerColor, CircleShape)
-                                            .then(if (!isActive) Modifier.blur(4.dp) else Modifier))
+                                        if (customBackground == null) {
+                                            Box(modifier = Modifier.fillMaxSize()
+                                                .background(iconContainerColor, CircleShape)
+                                                .then(if (!isActive) Modifier.blur(4.dp) else Modifier))
+                                        }
 
                                         val currentTileState = state
                                         if (currentTileState?.icon != null) {
@@ -2271,11 +2302,13 @@ fun DraggableTile(
                                         verticalArrangement = Arrangement.Center,
                                     ) {
                                         Text(label.toString(), style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold, color = contentColor, maxLines = 1,
+                                            fontWeight = FontWeight.Bold,
+                                            color = customPrimaryLabel ?: contentColor, maxLines = 1,
                                             modifier = Modifier.basicMarquee())
                                         if (summary != null) {
                                             Text(summary, style = MaterialTheme.typography.bodySmall,
-                                                color = contentColor.copy(alpha = contentColor.alpha * 0.7f),
+                                                color = customSecondaryLabel
+                                                    ?: contentColor.copy(alpha = contentColor.alpha * 0.7f),
                                                 maxLines = 1,
                                                 modifier = Modifier.basicMarquee())
                                         }

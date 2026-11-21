@@ -527,7 +527,7 @@ data class TileColors(
     val icon: Color,
 )
 
-private data class CustomLabelColors(
+internal data class CustomLabelColors(
     val active: Color?,
     val inactive: Color?,
     val activeSecondary: Color?,
@@ -540,7 +540,7 @@ private data class CustomLabelColors(
 )
 
 @Composable
-private fun rememberCustomLabelColors(): CustomLabelColors {
+internal fun rememberCustomLabelColors(): CustomLabelColors {
     val context = LocalContext.current
     val resolver = context.contentResolver
     fun readColors(): CustomLabelColors {
@@ -623,7 +623,7 @@ private fun rememberCustomLabelColors(): CustomLabelColors {
  * Draw custom fills inside the tile's existing shape and beneath its style and content.
  * Disabled and unavailable tiles retain the colors selected by SystemUI.
  */
-private fun qsTileBackgroundModifier(settings: CustomLabelColors, state: Int): Modifier {
+internal fun qsTileBackgroundModifier(settings: CustomLabelColors, state: Int): Modifier {
     val start = when (state) {
         STATE_ACTIVE -> settings.activeBackground
         STATE_INACTIVE -> settings.inactiveBackground
