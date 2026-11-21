@@ -156,6 +156,8 @@ constructor(
             "system:" + "qs_header_clock_style"
         private const val QS_CLOCK_COLOR_ENABLED = "system:qs_header_clock_color_enabled"
         private const val QS_CLOCK_COLOR = "system:qs_header_clock_color"
+        private const val QS_DATE_COLOR_ENABLED = "system:qs_header_date_color_enabled"
+        private const val QS_DATE_COLOR = "system:qs_header_date_color"
 
         private fun Int.stateToString() =
             when (this) {
@@ -171,6 +173,8 @@ constructor(
     private var qsClockStyle = 0
     private var qsClockColorEnabled = false
     private var qsClockColor = android.graphics.Color.WHITE
+    private var qsDateColorEnabled = false
+    private var qsDateColor = android.graphics.Color.WHITE
 
     private lateinit var iconManager: TintedIconManager
     private lateinit var carrierIconSlots: List<String>
@@ -393,7 +397,11 @@ constructor(
         clock.setStaticColor(hidden || qsClockColorEnabled)
         clock.setTextColor(ColorStateList.valueOf(clockColor))
         date.setTextColor(ColorStateList.valueOf(
-            if (hidden) android.graphics.Color.TRANSPARENT else getFgColor()
+            when {
+                hidden -> android.graphics.Color.TRANSPARENT
+                qsDateColorEnabled -> qsDateColor
+                else -> getFgColor()
+            }
         ))
     }
 
@@ -493,7 +501,10 @@ constructor(
         tunerService.addTunable(this, NETWORK_TRAFFIC_ENABLED)
 
         updateQsHeaderClockDateVisibility()
-        tunerService.addTunable(this, QS_HEADER_CLOCK_STYLE, QS_CLOCK_COLOR_ENABLED, QS_CLOCK_COLOR)
+        tunerService.addTunable(
+            this, QS_HEADER_CLOCK_STYLE, QS_CLOCK_COLOR_ENABLED, QS_CLOCK_COLOR,
+            QS_DATE_COLOR_ENABLED, QS_DATE_COLOR
+        )
     }
 
     override fun onViewDetached() {
@@ -529,6 +540,16 @@ constructor(
 
             QS_CLOCK_COLOR -> {
                 qsClockColor = TunerService.parseInteger(value, android.graphics.Color.WHITE)
+                updateQsHeaderClockDateVisibility()
+            }
+
+            QS_DATE_COLOR_ENABLED -> {
+                qsDateColorEnabled = TunerService.parseIntegerSwitch(value, false)
+                updateQsHeaderClockDateVisibility()
+            }
+
+            QS_DATE_COLOR -> {
+                qsDateColor = TunerService.parseInteger(value, android.graphics.Color.WHITE)
                 updateQsHeaderClockDateVisibility()
             }
 

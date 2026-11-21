@@ -77,6 +77,7 @@ class CustomClockViewStub @JvmOverloads constructor(
             currentClockView = LayoutInflater.from(context).inflate(layoutResId, this, false)
             addView(currentClockView)
             applyClockColor(currentClockView!!)
+            applyDateColor(currentClockView!!)
         }
         visibility = if (clockStyle == 0) View.GONE else View.VISIBLE
         currentClockView?.visibility = if (clockStyle == 0) View.GONE else View.VISIBLE
@@ -130,10 +131,37 @@ class CustomClockViewStub @JvmOverloads constructor(
         }
     }
 
+    private fun applyDateColor(view: View) {
+        val resolver = context.contentResolver
+        if (Settings.System.getIntForUser(
+                resolver, "qs_header_date_color_enabled", 0, UserHandle.USER_CURRENT
+            ) == 0) return
+
+        val tint = ColorStateList.valueOf(Settings.System.getIntForUser(
+            resolver, "qs_header_date_color", android.graphics.Color.WHITE, UserHandle.USER_CURRENT
+        ))
+
+        fun clocks(root: View): List<TextClock> {
+            if (root is TextClock) return listOf(root)
+            if (root !is ViewGroup) return emptyList()
+            return (0 until root.childCount).flatMap { clocks(root.getChildAt(it)) }
+        }
+
+        when (clockStyle) {
+            // Chip layout: the second text clock is the date.
+            1 -> clocks(view).getOrNull(1)?.setTextColor(tint)
+            // OOS layout: the date is separate from the two time layers.
+            2 -> view.findViewById<TextClock>(R.id.oos_date)?.setTextColor(tint)
+            // Analog layout: both text clocks display parts of the date.
+            3 -> clocks(view).forEach { it.setTextColor(tint) }
+        }
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         listOf(
-            "qs_header_clock_style", "qs_header_clock_color_enabled", "qs_header_clock_color"
+            "qs_header_clock_style", "qs_header_clock_color_enabled", "qs_header_clock_color",
+            "qs_header_date_color_enabled", "qs_header_date_color"
         ).forEach { key ->
             context.contentResolver.registerContentObserver(
                 Settings.System.getUriFor(key), false, settingsObserver, UserHandle.USER_ALL
