@@ -102,6 +102,17 @@ sealed interface BatteryColors {
     /** Error colors are used for low battery states typically */
     val errorFill: Int
 
+    /** Custom status bar tint; translucent fills keep the foreground attribution legible. */
+    data class CustomColor(private val color: Int) : BatteryColors {
+        override val fg = color
+        override val bg = (color and 0x00ffffff) or 0x33000000
+        override val fill = (color and 0x00ffffff) or 0x66000000
+        override val fillOnly = color
+        override val activeFill = (color and 0x00ffffff) or 0x66000000
+        override val warnFill = (color and 0x00ffffff) or 0x66000000
+        override val errorFill = (color and 0x00ffffff) or 0x66000000
+    }
+
     /** Color scheme appropriate for light mode (dark icons) */
     data object LightThemeColors : BatteryColors {
         override val fg = Color.BLACK
