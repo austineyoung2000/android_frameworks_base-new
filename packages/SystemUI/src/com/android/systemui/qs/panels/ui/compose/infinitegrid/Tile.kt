@@ -537,6 +537,7 @@ internal data class CustomLabelColors(
     val activeBackground: Color?,
     val activeGradientEnd: Color?,
     val inactiveBackground: Color?,
+    val inactiveGradientEnd: Color?,
 )
 
 @Composable
@@ -581,6 +582,10 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
                 "qs_inactive_background_color_enabled", "qs_inactive_background_color",
                 0xff55555f.toInt()
             ),
+            inactiveGradientEnd = color(
+                "qs_inactive_gradient_enabled", "qs_inactive_gradient_end_color",
+                0xff0000ff.toInt()
+            ),
         )
     }
     val colors = remember(context) { mutableStateOf(readColors()) }
@@ -599,6 +604,7 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_active_background_color_enabled", "qs_active_background_color",
             "qs_active_gradient_enabled", "qs_active_gradient_end_color",
             "qs_inactive_background_color_enabled", "qs_inactive_background_color",
+            "qs_inactive_gradient_enabled", "qs_inactive_gradient_end_color",
         ).forEach { key ->
             resolver.registerContentObserver(
                 Settings.System.getUriFor(key), false, observer, UserHandle.USER_ALL
@@ -630,7 +636,11 @@ internal fun qsTileBackgroundModifier(settings: CustomLabelColors, state: Int): 
         else -> null
     } ?: return Modifier
 
-    val end = if (state == STATE_ACTIVE) settings.activeGradientEnd else null
+    val end = when (state) {
+        STATE_ACTIVE -> settings.activeGradientEnd
+        STATE_INACTIVE -> settings.inactiveGradientEnd
+        else -> null
+    }
     return Modifier.drawBehind {
         if (end != null) {
             drawRect(brush = Brush.horizontalGradient(listOf(start, end)))
