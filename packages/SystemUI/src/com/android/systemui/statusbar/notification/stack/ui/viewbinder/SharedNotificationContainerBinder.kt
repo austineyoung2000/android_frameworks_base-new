@@ -34,6 +34,8 @@ import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.shared.Flags.extendedWallpaperEffects
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController
 import com.android.systemui.statusbar.notification.stack.NotificationStackSizeCalculator
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksView
 import com.android.systemui.statusbar.notification.stack.ui.view.SharedNotificationContainer
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel
 import com.android.systemui.util.kotlin.DisposableHandles
@@ -58,6 +60,7 @@ constructor(
     @AndroidUi private val androidUiDispatcher: CoroutineContext,
     @Main private val mainImmediateDispatcher: CoroutineDispatcher,
     val keyguardInteractor: KeyguardInteractor,
+    private val risingStacksController: RisingStacksController? = null,
 ) {
 
     private val calculateMaxNotifications: (Float, Boolean) -> Int = { space, extraShelfSpace ->
@@ -75,6 +78,16 @@ constructor(
         viewModel: SharedNotificationContainerViewModel,
     ): DisposableHandle {
         val disposables = DisposableHandles()
+        risingStacksController?.let { stacks ->
+            val selector = RisingStacksView(view.context, stacks::select)
+            view.setRisingStacksView(selector)
+            disposables += view.repeatWhenAttached {
+                repeatOnLifecycle(Lifecycle.State.CREATED) {
+                    launch { stacks.state.collect { view.renderRisingStacks(it) } }
+                }
+            }
+            disposables += DisposableHandle { view.removeRisingStacksView(selector) }
+        }
         disposables +=
             view.repeatWhenAttached {
                 repeatOnLifecycle(Lifecycle.State.CREATED) {

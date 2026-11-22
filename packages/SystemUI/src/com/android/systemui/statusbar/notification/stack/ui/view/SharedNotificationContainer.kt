@@ -30,6 +30,8 @@ import androidx.constraintlayout.widget.ConstraintSet.TOP
 import androidx.constraintlayout.widget.ConstraintSet.VERTICAL
 import com.android.systemui.res.R
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksView
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition.EdgeToMiddle
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition.MiddleToEdge
@@ -42,6 +44,45 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
     ConstraintLayout(context, attrs) {
 
     private val baseConstraintSet = ConstraintSet()
+    private var risingStacksView: RisingStacksView? = null
+    private var lastLayout: LayoutValues? = null
+
+    private data class LayoutValues(
+        val position: HorizontalPosition,
+        val start: Int,
+        val top: Int,
+        val end: Int,
+        val bottom: Int,
+        val alpha: Float,
+    )
+
+    fun setRisingStacksView(view: RisingStacksView) {
+        risingStacksView?.let { removeView(it) }
+        risingStacksView = view
+        addView(view)
+        view.bringToFront()
+    }
+
+    fun removeRisingStacksView(view: RisingStacksView) {
+        if (risingStacksView === view) {
+            removeView(view)
+            risingStacksView = null
+        }
+    }
+
+    fun renderRisingStacks(state: RisingStacksController.UiState) {
+        val selector = risingStacksView ?: return
+        val wasVisible = selector.visibility == View.VISIBLE
+        selector.render(state)
+        if (state.visible) selector.bringToFront()
+        if (wasVisible != state.visible) {
+            lastLayout?.let { values ->
+                updateConstraints(values.position, values.start, values.top, values.end,
+                    values.bottom, findViewById<View>(R.id.notification_stack_scroller)?.alpha
+                        ?: values.alpha)
+            }
+        }
+    }
 
     init {
         optimizationLevel = optimizationLevel or Optimizer.OPTIMIZATION_GRAPH
@@ -64,6 +105,9 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
         marginBottom: Int,
         nsslAlpha: Float,
     ) {
+        lastLayout = LayoutValues(
+            horizontalPosition, marginStart, marginTop, marginEnd, marginBottom, nsslAlpha
+        )
         val constraintSet = ConstraintSet()
         constraintSet.clone(baseConstraintSet)
 
@@ -106,7 +150,20 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
             connect(nsslId, START, startConstraintId, START, marginStart)
             connect(nsslId, END, endConstraintId, END, marginEnd)
             connect(nsslId, BOTTOM, PARENT_ID, BOTTOM, marginBottom)
-            connect(nsslId, TOP, PARENT_ID, TOP, marginTop)
+            val selector = risingStacksView
+            val selectorVisible = selector?.visibility == View.VISIBLE
+            val selectorHeight = if (selectorVisible) {
+                (56f * resources.displayMetrics.density + 0.5f).toInt()
+            } else 0
+            connect(nsslId, TOP, PARENT_ID, TOP, marginTop + selectorHeight)
+            if (selector != null) {
+                constrainWidth(selector.id, ConstraintSet.MATCH_CONSTRAINT)
+                constrainHeight(selector.id, selectorHeight)
+                connect(selector.id, START, startConstraintId, START, marginStart)
+                connect(selector.id, END, endConstraintId, END, marginEnd)
+                connect(selector.id, TOP, PARENT_ID, TOP, marginTop)
+                setVisibility(selector.id, selector.visibility)
+            }
         }
         constraintSet.applyTo(this)
     }
