@@ -83,10 +83,22 @@ constructor(
             view.setRisingStacksView(selector)
             disposables += view.repeatWhenAttached {
                 repeatOnLifecycle(Lifecycle.State.CREATED) {
-                    launch { stacks.state.collect { view.renderRisingStacks(it) } }
+                    launch {
+                        stacks.state.collect { state ->
+                            controller.view.setRisingStacksState(
+                                state.visible,
+                                state.selected?.packageName,
+                                state.selected?.userId ?: android.os.UserHandle.USER_NULL,
+                            )
+                            view.renderRisingStacks(state)
+                        }
+                    }
                 }
             }
-            disposables += DisposableHandle { view.removeRisingStacksView(selector) }
+            disposables += DisposableHandle {
+                controller.view.setRisingStacksState(false, null, android.os.UserHandle.USER_NULL)
+                view.removeRisingStacksView(selector)
+            }
         }
         disposables +=
             view.repeatWhenAttached {

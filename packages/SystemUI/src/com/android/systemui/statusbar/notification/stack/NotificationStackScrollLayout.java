@@ -494,6 +494,9 @@ public class NotificationStackScrollLayout
     private boolean mForwardScrollable;
     private boolean mBackwardScrollable;
     private NotificationShelf mShelf;
+    private boolean mRisingStacksActive;
+    private String mRisingStacksPackage;
+    private int mRisingStacksUserId = UserHandle.USER_NULL;
     private String mMotoCompactPackage;
     private int mMotoCompactUserId = UserHandle.USER_NULL;
     private final ArrayList<ExpandableNotificationRow> mMotoCompactExpandedRows = new ArrayList<>();
@@ -6416,8 +6419,27 @@ public class NotificationStackScrollLayout
         requestChildrenUpdate();
     }
 
+    public boolean isRisingStacksActive() {
+        return mRisingStacksActive;
+    }
+
+    public void setRisingStacksState(boolean active, String packageName, int userId) {
+        if (mRisingStacksActive == active
+                && java.util.Objects.equals(mRisingStacksPackage, packageName)
+                && mRisingStacksUserId == userId) return;
+        final boolean modeChanged = mRisingStacksActive != active;
+        mRisingStacksActive = active;
+        mRisingStacksPackage = active ? packageName : null;
+        mRisingStacksUserId = active ? userId : UserHandle.USER_NULL;
+        if (modeChanged) {
+            finishMotoCompactSelection();
+        }
+        updateMotoCompactPreview();
+        if (mShelf != null) mShelf.onRisingStacksModeChanged();
+    }
+
     public boolean isMotoCompactDesignActive() {
-        return mShelf != null && mShelf.isMotoCompactDesignEnabled()
+        return mShelf != null && (mShelf.isMotoCompactDesignEnabled() || mRisingStacksActive)
                 && mStackScrollAlgorithm != null
                 && (SceneContainerFlag.isEnabled() ? mIsOnLockscreen : onKeyguard())
                 && !mAmbientState.isPulsing() && !mAmbientState.isPulseExpanding()
@@ -6458,6 +6480,11 @@ public class NotificationStackScrollLayout
     }
 
     public boolean isMotoCompactAppSelected(StatusBarNotification notification) {
+        if (mRisingStacksActive) {
+            return notification != null && (mRisingStacksPackage == null
+                    || (mRisingStacksPackage.equals(notification.getPackageName())
+                    && mRisingStacksUserId == notification.getUserId()));
+        }
         return notification != null && mMotoCompactPackage != null
                 && mMotoCompactPackage.equals(notification.getPackageName())
                 && mMotoCompactUserId == notification.getUserId();
@@ -6479,7 +6506,7 @@ public class NotificationStackScrollLayout
     }
 
     public void toggleMotoCompactApp(StatusBarIconView icon) {
-        if (icon == null) return;
+        if (icon == null || mRisingStacksActive) return;
         final StatusBarNotification notification = icon.getNotification();
         if (!isMotoCompactDesignActive() || !isLockscreenNotificationLayoutActive()
                 || notification == null) return;

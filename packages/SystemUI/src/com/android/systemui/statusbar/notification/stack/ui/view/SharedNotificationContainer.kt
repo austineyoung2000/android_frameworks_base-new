@@ -19,6 +19,7 @@ package com.android.systemui.statusbar.notification.stack.ui.view
 import android.content.Context
 import android.util.AttributeSet
 import android.view.View
+import android.view.ViewTreeObserver
 import androidx.constraintlayout.core.widgets.Optimizer
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
@@ -30,6 +31,7 @@ import androidx.constraintlayout.widget.ConstraintSet.TOP
 import androidx.constraintlayout.widget.ConstraintSet.VERTICAL
 import com.android.systemui.res.R
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
 import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
 import com.android.systemui.statusbar.notification.stack.rising.RisingStacksView
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition
@@ -46,6 +48,24 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
     private val baseConstraintSet = ConstraintSet()
     private var risingStacksView: RisingStacksView? = null
     private var lastLayout: LayoutValues? = null
+    private val selectorLocation = IntArray(2)
+    private val shelfLocation = IntArray(2)
+    private val positionStacks = ViewTreeObserver.OnPreDrawListener {
+        val selector = risingStacksView
+        val stack = findViewById<NotificationStackScrollLayout>(R.id.notification_stack_scroller)
+        val shelf = stack?.shelf
+        if (selector != null && selector.visibility == View.VISIBLE &&
+            shelf != null && shelf.isLaidOut && shelf.isShown && shelf.alpha > 0f
+        ) {
+            getLocationOnScreen(selectorLocation)
+            shelf.getLocationOnScreen(shelfLocation)
+            selector.translationY = (shelfLocation[1] - selectorLocation[1] - selector.top).toFloat()
+            selector.alpha = shelf.alpha
+        } else if (selector != null) {
+            selector.alpha = 0f
+        }
+        true
+    }
 
     private data class LayoutValues(
         val position: HorizontalPosition,
@@ -61,10 +81,12 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
         risingStacksView = view
         addView(view)
         view.bringToFront()
+        viewTreeObserver.addOnPreDrawListener(positionStacks)
     }
 
     fun removeRisingStacksView(view: RisingStacksView) {
         if (risingStacksView === view) {
+            if (viewTreeObserver.isAlive) viewTreeObserver.removeOnPreDrawListener(positionStacks)
             removeView(view)
             risingStacksView = null
         }
@@ -155,13 +177,13 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
             val selectorHeight = if (selectorVisible) {
                 (56f * resources.displayMetrics.density + 0.5f).toInt()
             } else 0
-            connect(nsslId, TOP, PARENT_ID, TOP, marginTop + selectorHeight)
+            connect(nsslId, TOP, PARENT_ID, TOP, marginTop)
             if (selector != null) {
                 constrainWidth(selector.id, ConstraintSet.MATCH_CONSTRAINT)
                 constrainHeight(selector.id, selectorHeight)
                 connect(selector.id, START, startConstraintId, START, marginStart)
                 connect(selector.id, END, endConstraintId, END, marginEnd)
-                connect(selector.id, TOP, PARENT_ID, TOP, marginTop)
+                connect(selector.id, TOP, PARENT_ID, TOP, 0)
                 setVisibility(selector.id, selector.visibility)
             }
         }
