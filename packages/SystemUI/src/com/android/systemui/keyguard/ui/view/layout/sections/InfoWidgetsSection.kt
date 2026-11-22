@@ -18,12 +18,16 @@ package com.android.systemui.keyguard.ui.view.layout.sections
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import androidx.constraintlayout.widget.Barrier
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.res.R
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.lockscreen.ExtraInfoWidgetsController
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
 import javax.inject.Inject
 import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
 
@@ -36,6 +40,8 @@ constructor(
     
     private var infoWidgetsView: View? = null
     private var freeformView: ExtraInfoFreeformView? = null
+    private var positioningListener: ViewTreeObserver.OnPreDrawListener? = null
+    private var positionAdjustmentApplied = false
     
     override fun addViews(constraintLayout: ConstraintLayout) {
         
@@ -64,7 +70,85 @@ constructor(
     }
     
     override fun bindData(constraintLayout: ConstraintLayout) {
-        // ProgressImageView components handle their own data binding
+        val widget = infoWidgetsView ?: return
+        positioningListener?.let {
+            if (constraintLayout.viewTreeObserver.isAlive) {
+                constraintLayout.viewTreeObserver.removeOnPreDrawListener(it)
+            }
+        }
+        val widgetLocation = IntArray(2)
+        val rowLocation = IntArray(2)
+        val gap = (8f * context.resources.displayMetrics.density + 0.5f).toInt()
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            if (widget.isShown) {
+                val root = constraintLayout.rootView
+                val stack = root.findViewById<NotificationStackScrollLayout>(
+                    R.id.notification_stack_scroller
+                )
+                var contentBottom: Int? = null
+                val clockIds = intArrayOf(
+                    R.id.clock_ls,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE,
+                    R.id.keyguard_slice_view,
+                    R.id.keyguard_weather,
+                    R.id.default_weather_image,
+                    R.id.default_weather_text,
+                )
+                for (id in clockIds) {
+                    val content = root.findViewById<View>(id) ?: continue
+                    if (!content.isShown || content.alpha <= 0f || content.height <= 0 ||
+                        content.height >= root.height * 0.6f
+                    ) continue
+                    content.getLocationOnScreen(rowLocation)
+                    val bottom = rowLocation[1] + (content.height * content.scaleY).toInt()
+                    contentBottom = maxOf(contentBottom ?: bottom, bottom)
+                }
+                if (stack != null) {
+                    val stacksActive =
+                        stack.isRisingStacksActive && stack.isMotoCompactDesignActive
+                    var hasNotification = false
+                    for (i in 0 until stack.childCount) {
+                        val child = stack.getChildAt(i)
+                        if (child is ExpandableNotificationRow && child.isShown &&
+                            child.alpha > 0f &&
+                            (!stacksActive || stack.isMotoCompactNotificationSelected(child))
+                        ) {
+                            child.getLocationOnScreen(rowLocation)
+                            val visibleHeight =
+                                (child.actualHeight - child.clipBottomAmount).coerceAtLeast(0)
+                            val bottom = rowLocation[1] + (visibleHeight * child.scaleY).toInt()
+                            contentBottom = maxOf(contentBottom ?: bottom, bottom)
+                            hasNotification = true
+                        }
+                    }
+                    // When Stacks is visible without a preview, keep widgets below its icon row.
+                    if (stacksActive && !hasNotification) {
+                        val shelf = stack.shelf
+                        if (shelf != null && shelf.isLaidOut && shelf.isShown) {
+                            shelf.getLocationOnScreen(rowLocation)
+                            val bottom = rowLocation[1] + shelf.actualHeight
+                            contentBottom = maxOf(contentBottom ?: bottom, bottom)
+                        }
+                    }
+                }
+                if (contentBottom != null) {
+                    widget.getLocationOnScreen(widgetLocation)
+                    val untranslatedTop = widgetLocation[1] - widget.translationY
+                    widget.translationY = contentBottom + gap - untranslatedTop
+                    positionAdjustmentApplied = true
+                } else if (positionAdjustmentApplied) {
+                    widget.translationY = 0f
+                    positionAdjustmentApplied = false
+                }
+            } else if (positionAdjustmentApplied) {
+                widget.translationY = 0f
+                positionAdjustmentApplied = false
+            }
+            true
+        }
+        positioningListener = listener
+        constraintLayout.viewTreeObserver.addOnPreDrawListener(listener)
     }
     
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -149,6 +233,13 @@ constructor(
     }
     
     override fun removeViews(constraintLayout: ConstraintLayout) {
+        positioningListener?.let {
+            if (constraintLayout.viewTreeObserver.isAlive) {
+                constraintLayout.viewTreeObserver.removeOnPreDrawListener(it)
+            }
+        }
+        positioningListener = null
+        positionAdjustmentApplied = false
         infoWidgetsView?.let { view ->
             (view.parent as? ViewGroup)?.removeView(view)
         }
