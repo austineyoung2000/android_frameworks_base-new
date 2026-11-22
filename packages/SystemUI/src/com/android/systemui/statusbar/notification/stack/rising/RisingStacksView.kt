@@ -41,19 +41,7 @@ class RisingStacksView(
         visibility = if (state.visible) View.VISIBLE else View.GONE
         row.removeAllViews()
         if (!state.visible) return
-        row.addView(TextView(context).apply {
-            text = context.getString(R.string.rising_stacks_all)
-            contentDescription = context.getString(R.string.rising_stacks_show_all)
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
-            background = chipBackground(state.selected == null)
-            setOnClickListener { onSelect(null) }
-        }, LinearLayout.LayoutParams(dp(50), dp(44)).apply {
-            marginStart = dp(8)
-            marginEnd = dp(6)
-        })
-        state.groups.forEach { group ->
+        state.groups.forEachIndexed { index, group ->
             val key = group.app
             var label = key.packageName
             val icon = try {
@@ -91,9 +79,22 @@ class RisingStacksView(
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, dp(14)))
             row.addView(item, LinearLayout.LayoutParams(dp(48), dp(50)).apply {
+                marginStart = if (index == 0) dp(8) else 0
                 marginEnd = dp(4)
             })
         }
+        row.addView(TextView(context).apply {
+            text = context.getString(R.string.rising_stacks_all)
+            contentDescription = context.getString(R.string.rising_stacks_show_all)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            background = chipBackground(state.selected == null)
+            setOnClickListener { onSelect(null) }
+        }, LinearLayout.LayoutParams(dp(50), dp(44)).apply {
+            marginStart = dp(8)
+            marginEnd = dp(6)
+        })
     }
 
     private fun chipBackground(selected: Boolean) = GradientDrawable().apply {

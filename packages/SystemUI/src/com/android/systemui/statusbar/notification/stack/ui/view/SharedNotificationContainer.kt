@@ -32,6 +32,7 @@ import androidx.constraintlayout.widget.ConstraintSet.VERTICAL
 import com.android.systemui.res.R
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
 import com.android.systemui.statusbar.notification.stack.rising.RisingStacksView
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition
@@ -55,10 +56,25 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
         val stack = findViewById<NotificationStackScrollLayout>(R.id.notification_stack_scroller)
         val shelf = stack?.shelf
         if (selector != null && selector.visibility == View.VISIBLE &&
-            shelf != null && shelf.isLaidOut && shelf.isShown && shelf.alpha > 0f
+            stack != null && shelf != null && shelf.isLaidOut && shelf.isShown && shelf.alpha > 0f
         ) {
             getLocationOnScreen(selectorLocation)
-            shelf.getLocationOnScreen(shelfLocation)
+            var firstRow: ExpandableNotificationRow? = null
+            for (i in 0 until stack.childCount) {
+                val child = stack.getChildAt(i)
+                if (child is ExpandableNotificationRow && child.isShown && child.alpha > 0f &&
+                    stack.isMotoCompactNotificationSelected(child) &&
+                    (firstRow == null || child.y < firstRow.y)
+                ) {
+                    firstRow = child
+                }
+            }
+            if (firstRow != null) {
+                firstRow.getLocationOnScreen(shelfLocation)
+                shelfLocation[1] -= selector.height
+            } else {
+                shelf.getLocationOnScreen(shelfLocation)
+            }
             selector.translationY = (shelfLocation[1] - selectorLocation[1] - selector.top).toFloat()
             selector.alpha = shelf.alpha
         } else if (selector != null) {

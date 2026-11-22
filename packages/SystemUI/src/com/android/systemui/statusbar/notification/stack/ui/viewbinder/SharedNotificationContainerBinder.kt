@@ -67,7 +67,7 @@ constructor(
         val shelfHeight = controller.getShelfHeight().toFloat()
         notificationStackSizeCalculator.computeMaxKeyguardNotifications(
             controller.view,
-            space,
+            (space - controller.view.risingStacksHeaderHeight).coerceAtLeast(0f),
             if (extraShelfSpace) shelfHeight else 0f,
             shelfHeight,
         )

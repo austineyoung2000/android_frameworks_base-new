@@ -6423,6 +6423,12 @@ public class NotificationStackScrollLayout
         return mRisingStacksActive;
     }
 
+    /** Vertical space reserved for the app selector above lock-screen notification cards. */
+    public int getRisingStacksHeaderHeight() {
+        return mRisingStacksActive && isMotoCompactDesignActive()
+                ? Math.round(56f * getResources().getDisplayMetrics().density) : 0;
+    }
+
     public void setRisingStacksState(boolean active, String packageName, int userId) {
         if (mRisingStacksActive == active
                 && java.util.Objects.equals(mRisingStacksPackage, packageName)

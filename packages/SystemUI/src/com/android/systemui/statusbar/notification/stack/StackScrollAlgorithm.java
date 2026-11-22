@@ -557,6 +557,9 @@ public class StackScrollAlgorithm {
         float currentY = -ambientState.getScrollY();
         // add top padding at the start as long as we're not on the lock screen
         currentY += getScrimTopPaddingOrZero(ambientState);
+        if (mHostView instanceof NotificationStackScrollLayout stack) {
+            currentY += stack.getRisingStacksHeaderHeight();
+        }
         state.firstViewInShelf = null;
         for (int i = 0; i < state.visibleChildren.size(); i++) {
             final ExpandableView view = state.visibleChildren.get(i);
@@ -626,6 +629,11 @@ public class StackScrollAlgorithm {
         float scrimTopPadding = getScrimTopPaddingOrZero(ambientState);
         algorithmState.mCurrentYPosition += scrimTopPadding;
         algorithmState.mCurrentExpandedYPosition += scrimTopPadding;
+        if (mHostView instanceof NotificationStackScrollLayout stack) {
+            int stacksHeaderHeight = stack.getRisingStacksHeaderHeight();
+            algorithmState.mCurrentYPosition += stacksHeaderHeight;
+            algorithmState.mCurrentExpandedYPosition += stacksHeaderHeight;
+        }
 
         int childCount = algorithmState.visibleChildren.size();
         for (int i = 0; i < childCount; i++) {
