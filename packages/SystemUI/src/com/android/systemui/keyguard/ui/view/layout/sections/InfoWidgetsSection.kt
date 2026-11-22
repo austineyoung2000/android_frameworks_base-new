@@ -135,9 +135,13 @@ constructor(
                     }
                 }
                 if (contentBottom != null) {
+                    // Off-screen cards should not push widgets into the fingerprint area.
+                    val viewportBottom = stack.risingStacksViewportBottomOnScreen
+                    val anchorBottom =
+                        if (viewportBottom > 0) minOf(contentBottom, viewportBottom) else contentBottom
                     widget.getLocationOnScreen(widgetLocation)
                     val untranslatedTop = widgetLocation[1] - widget.translationY
-                    widget.translationY = contentBottom + gap - untranslatedTop
+                    widget.translationY = anchorBottom + gap - untranslatedTop
                     positionAdjustmentApplied = true
                 } else if (positionAdjustmentApplied) {
                     widget.translationY = 0f

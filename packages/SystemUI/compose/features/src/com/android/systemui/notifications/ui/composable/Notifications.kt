@@ -18,6 +18,8 @@
 package com.android.systemui.notifications.ui.composable
 
 import android.util.Log
+import android.view.View
+import android.view.ViewTreeObserver
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -49,10 +52,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -172,6 +177,25 @@ fun ContentScope.ConstrainedNotificationStack(
 ) {
     val stacksActive by viewModel.risingStacksActive.collectAsStateWithLifecycle(initialValue = false)
     val stacksScrollState = rememberScrollState()
+    val rootView = LocalView.current.rootView
+    val density = LocalDensity.current
+    var availableHeightPx by remember { mutableIntStateOf(0) }
+    var widgetHeightPx by remember { mutableIntStateOf(0) }
+    val widgetGapPx = with(density) { 8.dp.roundToPx() }
+    val fingerprintGapPx = with(density) { 12.dp.roundToPx() }
+    DisposableEffect(rootView, stacksActive) {
+        val observer = rootView.viewTreeObserver
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            val widget = rootView.findViewById<View>(R.id.keyguard_info_widgets)
+            val height = if (stacksActive && widget != null && widget.isShown) widget.height else 0
+            if (widgetHeightPx != height) widgetHeightPx = height
+            true
+        }
+        if (observer.isAlive) observer.addOnPreDrawListener(listener)
+        onDispose {
+            if (observer.isAlive) observer.removeOnPreDrawListener(listener)
+        }
+    }
     LaunchedEffect(stacksActive, stacksScrollState) {
         if (stacksActive) {
             snapshotFlow {
@@ -188,11 +212,14 @@ fun ContentScope.ConstrainedNotificationStack(
     Box(
         modifier =
             modifier
-                .onSizeChanged { viewModel.onConstrainedAvailableSpaceChanged(it.height) }
+                .onSizeChanged {
+                    availableHeightPx = it.height
+                    viewModel.onConstrainedAvailableSpaceChanged(it.height)
+                }
                 .onPlaced {
                     val rawBounds = it.rawBoundsInWindow()
                     debugLog(viewModel) { "Constrained.container onPlaced bounds=$rawBounds" }
-                    viewModel.setStackBounds(rawBounds)
+                    if (!stacksActive) viewModel.setStackBounds(rawBounds)
                 }
                 .onUnplaced {
                     debugLog(viewModel) { "Constrained.container onUnplaced" }
@@ -203,7 +230,19 @@ fun ContentScope.ConstrainedNotificationStack(
         if (stacksActive) {
             Box(
                 modifier =
-                    Modifier.fillMaxSize()
+                    Modifier.fillMaxWidth()
+                        .heightIn(
+                            max = if (availableHeightPx > 0) {
+                                with(density) {
+                                    (availableHeightPx - widgetHeightPx -
+                                        (if (widgetHeightPx > 0) widgetGapPx else 0) -
+                                        fingerprintGapPx).coerceAtLeast(0).toDp()
+                                }
+                            } else Dp.Unspecified
+                        )
+                        .onPlaced { coordinates ->
+                            viewModel.setStackBounds(coordinates.rawBoundsInWindow())
+                        }
                         .disableSwipesWhenScrolling()
                         .verticalScroll(stacksScrollState)
             ) {

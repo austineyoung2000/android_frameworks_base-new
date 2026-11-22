@@ -6423,6 +6423,14 @@ public class NotificationStackScrollLayout
         return mRisingStacksActive;
     }
 
+    /** Bottom edge of the Stacks notification viewport in screen coordinates. */
+    public int getRisingStacksViewportBottomOnScreen() {
+        if (!mRisingStacksActive || !SceneContainerFlag.isEnabled()) return -1;
+        final int[] rootLocation = new int[2];
+        getRootView().getLocationOnScreen(rootLocation);
+        return rootLocation[1] + Math.round(mAmbientState.getStackBounds().bottom);
+    }
+
     /** The offset already applied by the active notification scrolling container. */
     public int getRisingStacksScrollOffset() {
         if (!mRisingStacksActive) return 0;
