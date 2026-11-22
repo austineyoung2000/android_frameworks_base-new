@@ -113,6 +113,7 @@ class RisingStacksController @Inject constructor(
                     entry.children.forEach(::add)
                 }
                 is BundleEntry -> entry.children.forEach(::visit)
+                else -> Unit // Other pipeline entries have no supported notification children.
             }
         }
         entries.forEach(::visit)
