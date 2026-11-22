@@ -6423,6 +6423,12 @@ public class NotificationStackScrollLayout
         return mRisingStacksActive;
     }
 
+    /** True for cards displayed in the Rising Stacks lockscreen preview. */
+    public boolean isRisingStacksPreviewRow(ExpandableView view) {
+        return SceneContainerFlag.isEnabled() && mRisingStacksActive
+                && isMotoCompactDesignActive() && isMotoCompactNotificationSelected(view);
+    }
+
     /** Bottom edge of the Stacks notification viewport in screen coordinates. */
     public int getRisingStacksViewportBottomOnScreen() {
         if (!mRisingStacksActive || !SceneContainerFlag.isEnabled()) return -1;
@@ -7633,9 +7639,22 @@ public class NotificationStackScrollLayout
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
         final int saveCount = mMotoCompactAnimator.prepareCanvas(canvas, child);
+        int stacksClipSave = -1;
+        if (child instanceof ExpandableView row && isRisingStacksPreviewRow(row)
+                && !mLaunchingNotification) {
+            // With the compact shelf disabled for preview cards, the scroll viewport becomes
+            // their clipping boundary. Keep overflow away from widgets and the fingerprint area.
+            final int[] location = new int[2];
+            getLocationInWindow(location);
+            final float top = mAmbientState.getStackBounds().top - location[1];
+            final float bottom = mAmbientState.getStackBounds().bottom - location[1];
+            stacksClipSave = canvas.save();
+            canvas.clipRect(0, top, getWidth(), Math.max(top, bottom));
+        }
         try {
             return drawChildWithStackClipping(canvas, child, drawingTime);
         } finally {
+            if (stacksClipSave >= 0) canvas.restoreToCount(stacksClipSave);
             if (saveCount >= 0) canvas.restoreToCount(saveCount);
         }
     }

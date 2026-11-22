@@ -265,6 +265,12 @@ public class StackScrollAlgorithm {
     private void hideNotificationsBelowShelf(StackScrollAlgorithmState algorithmState,
             AmbientState ambientState) {
         for (ExpandableView view : algorithmState.visibleChildren) {
+            // Stacks draws its selector above the cards. The old shelf is only an anchor and
+            // must not hide preview rows below it; the scroll viewport clips overflow instead.
+            if (mHostView instanceof NotificationStackScrollLayout stack
+                    && stack.isRisingStacksPreviewRow(view)) {
+                continue;
+            }
             final ViewState viewState = view.getViewState();
             NotificationShelf shelf = ambientState.getShelf();
             if (shelf != null) {
@@ -800,7 +806,12 @@ public class StackScrollAlgorithm {
                 viewState.setYTranslation((fullHeight - getMaxAllowedChildHeight(view)) / 2f,
                         "StackScrollAlgorithm.updateChild.emptyShade");
             } else if (view != ambientState.getTrackedHeadsUpRow()) {
-                if (ambientState.isExpansionChanging()) {
+                if (mHostView instanceof NotificationStackScrollLayout stack
+                        && stack.isRisingStacksPreviewRow(view)) {
+                    // Do not clamp preview cards into the hidden compact shelf.
+                    viewState.inShelf = false;
+                    viewState.hidden = false;
+                } else if (ambientState.isExpansionChanging()) {
                     // We later update shelf state, then hide views below the shelf.
                     viewState.hidden = false;
                     viewState.inShelf = algorithmState.firstViewInShelf != null

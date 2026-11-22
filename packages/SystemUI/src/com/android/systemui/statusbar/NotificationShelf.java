@@ -835,8 +835,14 @@ public class NotificationShelf extends ActivatableNotificationView {
             } else {
                 notificationClipEnd = shelfStart - mPaddingBetweenElements;
             }
-            int clipTop = updateNotificationClipHeight(child, notificationClipEnd, notGoneIndex);
-            clipTopAmount = Math.max(clipTop, clipTopAmount);
+            if (mHostLayout.isRisingStacksPreviewRow(child)) {
+                // The compact shelf is hidden for Stacks. Its old bottom clipping would turn
+                // the selected notification into a thin strip even inside the scroll viewport.
+                child.setClipBottomAmount(0);
+            } else {
+                int clipTop = updateNotificationClipHeight(child, notificationClipEnd, notGoneIndex);
+                clipTopAmount = Math.max(clipTop, clipTopAmount);
+            }
 
             // If the current row is an ExpandableNotificationRow, update its color, roundedness,
             // and icon state.
