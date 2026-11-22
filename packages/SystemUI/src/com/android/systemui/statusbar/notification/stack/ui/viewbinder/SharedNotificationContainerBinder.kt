@@ -84,13 +84,24 @@ constructor(
             disposables += view.repeatWhenAttached {
                 repeatOnLifecycle(Lifecycle.State.CREATED) {
                     launch {
-                        stacks.state.collect { state ->
+                        combine(
+                            stacks.state,
+                            keyguardInteractor.primaryBouncerShowing,
+                            keyguardInteractor.alternateBouncerShowing,
+                            viewModel.isOnAnyBouncer,
+                        ) { state, primaryBouncer, alternateBouncer, transitioningBouncer ->
+                            state to (primaryBouncer || alternateBouncer || transitioningBouncer)
+                        }.collect { (state, bouncerShowing) ->
                             controller.view.setRisingStacksState(
                                 state.visible,
                                 state.selected?.packageName,
                                 state.selected?.userId ?: android.os.UserHandle.USER_NULL,
                             )
-                            view.renderRisingStacks(state)
+                            // Keep the compact shelf suppressed while hiding the selector from
+                            // the credential screen, including bouncer transitions.
+                            view.renderRisingStacks(
+                                state.copy(visible = state.visible && !bouncerShowing)
+                            )
                         }
                     }
                 }
