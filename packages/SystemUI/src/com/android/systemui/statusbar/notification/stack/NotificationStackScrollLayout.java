@@ -6149,7 +6149,7 @@ public class NotificationStackScrollLayout
             if (SceneContainerFlag.isEnabled()) {
                 updateIntrinsicStackHeight();
                 updateStackEndHeightAndStackHeight(mAmbientState.getExpansionFraction());
-                if (maxDisplayedNotifications == -1) {
+                if (maxDisplayedNotifications == -1 && !mRisingStacksActive) {
                     animateGoToFullShade(0);
                 }
             } else {
@@ -6421,6 +6421,13 @@ public class NotificationStackScrollLayout
 
     public boolean isRisingStacksActive() {
         return mRisingStacksActive;
+    }
+
+    /** The offset already applied by the active notification scrolling container. */
+    public int getRisingStacksScrollOffset() {
+        if (!mRisingStacksActive) return 0;
+        return SceneContainerFlag.isEnabled()
+                ? mScrollViewFields.scrollState.getScrollPosition() : getOwnScrollY();
     }
 
     /** Vertical space reserved for the app selector above lock-screen notification cards. */

@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.overscroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.withoutVisualEffect
@@ -169,6 +170,21 @@ fun ContentScope.ConstrainedNotificationStack(
     viewModel: NotificationsPlaceholderViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val stacksActive by viewModel.risingStacksActive.collectAsStateWithLifecycle(initialValue = false)
+    val stacksScrollState = rememberScrollState()
+    LaunchedEffect(stacksActive, stacksScrollState) {
+        if (stacksActive) {
+            snapshotFlow {
+                ShadeScrollState(
+                    isScrolledToTop = stacksScrollState.value == 0,
+                    scrollPosition = stacksScrollState.value,
+                    maxScrollPosition = stacksScrollState.maxValue,
+                )
+            }.collect { viewModel.setScrollState(it) }
+        } else {
+            stacksScrollState.scrollTo(0)
+        }
+    }
     Box(
         modifier =
             modifier
@@ -184,18 +200,43 @@ fun ContentScope.ConstrainedNotificationStack(
                     viewModel.onLockScreenStackBottomChanged(-1f)
                 }
     ) {
-        StackPlaceholder(
-            tag = "Constrained",
-            viewModel = viewModel,
-            modifier =
-                Modifier.fillMaxWidth()
-                    .notificationStackHeight(view = stackScrollView, constrainToMaxHeight = true)
-                    .onGloballyPositioned { coordinates ->
-                        viewModel.onLockScreenStackBottomChanged(
-                            coordinates.boundsInWindow().bottom
-                        )
-                    },
-        )
+        if (stacksActive) {
+            Box(
+                modifier =
+                    Modifier.fillMaxSize()
+                        .disableSwipesWhenScrolling()
+                        .verticalScroll(stacksScrollState)
+            ) {
+                StackPlaceholder(
+                    tag = "Constrained",
+                    viewModel = viewModel,
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .notificationStackHeight(
+                                view = stackScrollView,
+                                totalVerticalPadding = 56.dp,
+                            )
+                            .onGloballyPositioned { coordinates ->
+                                viewModel.onLockScreenStackBottomChanged(
+                                    coordinates.boundsInWindow().bottom
+                                )
+                            },
+                )
+            }
+        } else {
+            StackPlaceholder(
+                tag = "Constrained",
+                viewModel = viewModel,
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .notificationStackHeight(view = stackScrollView, constrainToMaxHeight = true)
+                        .onGloballyPositioned { coordinates ->
+                            viewModel.onLockScreenStackBottomChanged(
+                                coordinates.boundsInWindow().bottom
+                            )
+                        },
+            )
+        }
         HeadsUpNotificationPlaceholder(
             tag = "Constrained",
             stackScrollView = stackScrollView,

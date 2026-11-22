@@ -71,7 +71,7 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
             }
             if (firstRow != null) {
                 firstRow.getLocationOnScreen(shelfLocation)
-                shelfLocation[1] -= selector.height
+                shelfLocation[1] += stack.risingStacksScrollOffset - selector.height
             } else {
                 shelf.getLocationOnScreen(shelfLocation)
             }

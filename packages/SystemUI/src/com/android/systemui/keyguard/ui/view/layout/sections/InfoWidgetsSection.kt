@@ -80,11 +80,13 @@ constructor(
         val rowLocation = IntArray(2)
         val gap = (8f * context.resources.displayMetrics.density + 0.5f).toInt()
         val listener = ViewTreeObserver.OnPreDrawListener {
-            if (widget.isShown) {
-                val root = constraintLayout.rootView
-                val stack = root.findViewById<NotificationStackScrollLayout>(
-                    R.id.notification_stack_scroller
-                )
+            val root = constraintLayout.rootView
+            val stack = root.findViewById<NotificationStackScrollLayout>(
+                R.id.notification_stack_scroller
+            )
+            if (widget.isShown && stack != null && stack.isRisingStacksActive &&
+                stack.isMotoCompactDesignActive
+            ) {
                 var contentBottom: Int? = null
                 val clockIds = intArrayOf(
                     R.id.clock_ls,
