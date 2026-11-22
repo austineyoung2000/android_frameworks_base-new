@@ -163,7 +163,14 @@ public class StackScrollAlgorithm {
         updateShelfState(algorithmState, ambientState);
         updateShelfIconContainerState(ambientState);
         updateAlphaState(algorithmState, ambientState);
-        mLockscreenNotificationStack.apply(algorithmState, ambientState);
+        if (mHostView instanceof NotificationStackScrollLayout stack
+                && stack.isRisingStacksActive() && stack.isMotoCompactDesignActive()) {
+            // The separate lockscreen deck also collapses and hides cards behind the shelf.
+            // Stacks owns the preview while enabled; leave the user's deck setting intact.
+            mLockscreenNotificationStack.reset();
+        } else {
+            mLockscreenNotificationStack.apply(algorithmState, ambientState);
+        }
         if (mHostView instanceof NotificationStackScrollLayout stack) {
             stack.keepMotoNotificationsInPlaceWhileDozing(algorithmState.visibleChildren);
             stack.positionAodNotificationPopup(algorithmState.visibleChildren);
@@ -742,6 +749,11 @@ public class StackScrollAlgorithm {
 
         float expansionFraction = getExpansionFractionWithoutShelf(
                 algorithmState, ambientState);
+        if (mHostView instanceof NotificationStackScrollLayout stack
+                && stack.isRisingStacksPreviewRow(view)) {
+            // A collapsed legacy shelf can otherwise scale a full notification down to a strip.
+            expansionFraction = 1f;
+        }
 
         // Add gap between sections.
         final float gap = getGapHeightForChild(ambientState.getSectionProvider(), i, view,
