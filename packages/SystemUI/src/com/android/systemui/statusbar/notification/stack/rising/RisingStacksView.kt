@@ -26,6 +26,9 @@ class RisingStacksView(
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
     }
+    private val iconPack = RisingStacksIconPack(context)
+    private var lastSelected: RisingStacksModel.AppKey? = null
+    private var hasRendered = false
     private val density = resources.displayMetrics.density
     private fun dp(value: Int) = (value * density + 0.5f).toInt()
 
@@ -41,6 +44,9 @@ class RisingStacksView(
         visibility = if (state.visible) View.VISIBLE else View.GONE
         row.removeAllViews()
         if (!state.visible) return
+        val selectionChanged = hasRendered && lastSelected != state.selected
+        lastSelected = state.selected
+        hasRendered = true
         state.groups.forEachIndexed { index, group ->
             val key = group.app
             var label = key.packageName
@@ -50,9 +56,9 @@ class RisingStacksView(
                 val appContext = context.createPackageContextAsUser(key.packageName, 0, user)
                 val info = appContext.applicationInfo
                 label = info.loadLabel(appContext.packageManager).toString()
-                appContext.packageManager.getUserBadgedIcon(
-                    info.loadIcon(appContext.packageManager), user
-                )
+                val drawable = iconPack.icon(state.iconPack, appContext, key.packageName)
+                    ?: info.loadIcon(appContext.packageManager)
+                appContext.packageManager.getUserBadgedIcon(drawable, user)
             } catch (e: Exception) {
                 context.getDrawable(android.R.drawable.sym_def_app_icon)
             }
@@ -78,12 +84,16 @@ class RisingStacksView(
                 gravity = Gravity.CENTER
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, dp(14)))
+            if (selectionChanged && state.selected == key) {
+                item.alpha = 0.7f
+                item.animate().alpha(1f).setDuration(90).start()
+            }
             row.addView(item, LinearLayout.LayoutParams(dp(48), dp(50)).apply {
                 marginStart = if (index == 0) dp(8) else 0
                 marginEnd = dp(4)
             })
         }
-        row.addView(TextView(context).apply {
+        val all = TextView(context).apply {
             text = context.getString(R.string.rising_stacks_all)
             contentDescription = context.getString(R.string.rising_stacks_show_all)
             setTextColor(Color.WHITE)
@@ -91,7 +101,12 @@ class RisingStacksView(
             setTypeface(typeface, Typeface.BOLD)
             background = chipBackground(state.selected == null)
             setOnClickListener { onSelect(null) }
-        }, LinearLayout.LayoutParams(dp(50), dp(44)).apply {
+        }
+        if (selectionChanged && state.selected == null) {
+            all.alpha = 0.7f
+            all.animate().alpha(1f).setDuration(90).start()
+        }
+        row.addView(all, LinearLayout.LayoutParams(dp(50), dp(44)).apply {
             marginStart = dp(8)
             marginEnd = dp(6)
         })

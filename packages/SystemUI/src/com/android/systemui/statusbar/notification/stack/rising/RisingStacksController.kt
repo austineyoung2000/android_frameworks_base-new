@@ -30,12 +30,14 @@ class RisingStacksController @Inject constructor(
         val visible: Boolean = false,
         val groups: List<RisingStacksModel.AppGroup> = emptyList(),
         val selected: RisingStacksModel.AppKey? = null,
+        val iconPack: String? = null,
     )
 
     private val mutableState = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = mutableState
     private var enabled = false
     private var selected: RisingStacksModel.AppKey? = null
+    private var iconPack: String? = null
     private var attached = false
     private var visibleGroups: List<RisingStacksModel.AppGroup> = emptyList()
 
@@ -78,6 +80,10 @@ class RisingStacksController @Inject constructor(
             publish()
             filter.invalidateList("Rising Stacks setting changed")
         }, "system:rising_stacks_enabled")
+        tunerService.addTunable({ _, value ->
+            iconPack = value?.takeIf { it.isNotBlank() }
+            publish()
+        }, "system:rising_stacks_icon_pack")
     }
 
     fun select(app: RisingStacksModel.AppKey?) {
@@ -126,7 +132,7 @@ class RisingStacksController @Inject constructor(
     private fun publish() {
         val show = enabled && onLockscreen() &&
             visibleGroups.isNotEmpty()
-        mutableState.value = UiState(show, if (show) visibleGroups else emptyList(), selected)
+        mutableState.value = UiState(show, if (show) visibleGroups else emptyList(), selected, iconPack)
     }
 
     private fun keyFor(entry: NotificationEntry): RisingStacksModel.AppKey =
