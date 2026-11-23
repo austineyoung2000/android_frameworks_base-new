@@ -161,10 +161,10 @@ class AmbientPeekController @Inject constructor(
             val title = if (isRedacted) "" else
                 n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty().take(160)
             val text = if (isRedacted) "" else
-                n.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty().take(160)
+                n.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty().take(8192)
             counts.getOrPut(key) { ArrayList() }.add(Preview(title, text, isRedacted))
         }
-        return counts.map { (key, entries) -> Group(key, entries.size, entries.take(3)) }
+        return counts.map { (key, entries) -> Group(key, entries.size, entries.take(50)) }
     }
 
     private fun resetAndRender() {
