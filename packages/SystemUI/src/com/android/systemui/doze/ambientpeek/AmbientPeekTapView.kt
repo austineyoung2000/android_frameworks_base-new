@@ -17,7 +17,7 @@ import com.android.systemui.res.R
 import kotlin.math.max
 import kotlin.math.min
 
-/** Draws only dim monochrome AOD content; tap input is routed by the doze sensor host. */
+/** Draws app icons and an outlined AOD preview; input is routed by the doze sensor host. */
 class AmbientPeekTapView(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var groups: List<AmbientPeekController.Group> = emptyList()
@@ -136,9 +136,8 @@ class AmbientPeekTapView(context: Context) : View(context) {
                     else UserHandle.of(group.app.userId)
                 val app = context.createPackageContextAsUser(group.app.packageName, 0, user)
                 val original = app.applicationInfo.loadIcon(app.packageManager)
-                val icon = original.constantState?.newDrawable()?.mutate() ?: original.mutate()
-                icon.setTint(Color.WHITE)
-                icon.alpha = 180
+                val badged = app.packageManager.getUserBadgedIcon(original, user)
+                val icon = badged.constantState?.newDrawable()?.mutate() ?: badged.mutate()
                 icon.setBounds((x + dp(12f)).toInt(), (rowY + dp(3f)).toInt(),
                     (x + dp(36f)).toInt(), (rowY + dp(27f)).toInt())
                 icon.draw(canvas)
