@@ -133,7 +133,7 @@ class AmbientPeekTapView(context: Context) : View(context) {
         paint.textAlign = Paint.Align.CENTER
         paint.textSize = dp(10f)
         val selectedPack = Settings.System.getStringForUser(
-            context.contentResolver, "rising_stacks_icon_pack", ActivityManager.getCurrentUser()
+            context.contentResolver, "ambient_peek_icon_pack", ActivityManager.getCurrentUser()
         )
         current.forEachIndexed { i, group ->
             val x = firstX + i * dp(48f)
