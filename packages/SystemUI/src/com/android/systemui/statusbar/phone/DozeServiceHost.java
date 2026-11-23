@@ -44,6 +44,7 @@ import com.android.systemui.dagger.qualifiers.Application;
 import com.android.systemui.deviceentry.domain.interactor.DeviceEntryFingerprintAuthInteractor;
 import com.android.systemui.display.DisplayExtensionsKt;
 import com.android.systemui.doze.DozeHost;
+import com.android.systemui.doze.ambientpeek.AmbientPeekController;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.doze.DozeReceiver;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
@@ -135,6 +136,7 @@ public final class DozeServiceHost implements DozeHost {
     private final AmbientDisplayConfiguration mAmbientDisplayConfiguration;
     private final AodDimInteractor mAodDimInteractor;
     private final SelectedUserInteractor mSelectedUserInteractor;
+    private final dagger.Lazy<AmbientPeekController> mAmbientPeekController;
 
     @Inject
     public DozeServiceHost(DozeLog dozeLog, PowerManager powerManager,
@@ -157,7 +159,8 @@ public final class DozeServiceHost implements DozeHost {
             Context context,
             AmbientDisplayConfiguration ambientDisplayConfiguration,
             AodDimInteractor aodDimInteractor,
-            SelectedUserInteractor selectedUserInteractor) {
+            SelectedUserInteractor selectedUserInteractor,
+            dagger.Lazy<AmbientPeekController> ambientPeekController) {
         super();
         mDozeLog = dozeLog;
         mPowerManager = powerManager;
@@ -184,6 +187,7 @@ public final class DozeServiceHost implements DozeHost {
         mAmbientDisplayConfiguration = ambientDisplayConfiguration;
         mAodDimInteractor = aodDimInteractor;
         mSelectedUserInteractor = selectedUserInteractor;
+        mAmbientPeekController = ambientPeekController;
     }
 
     // TODO: we should try to not pass status bar in here if we can avoid it.
@@ -515,6 +519,21 @@ public final class DozeServiceHost implements DozeHost {
             return;
         }
         mAnimateWakeup = animateWakeup;
+    }
+
+    @Override
+    public boolean onAmbientPeekTap(float screenX, float screenY) {
+        if (screenX < 0 || screenY < 0) return false;
+        float scale = DisplayExtensionsKt.getDisplayScaleFactor(mContext.getDisplay());
+        float x = screenX * scale;
+        float y = screenY * scale;
+        if (mAmbientIndicationContainer != null && mAmbientIndicationContainer.isShown()
+                && mAmbientIndicationContainer.getAlpha() > 0f) {
+            android.graphics.Rect occupied = new android.graphics.Rect();
+            if (mAmbientIndicationContainer.getGlobalVisibleRect(occupied)
+                    && occupied.contains((int) x, (int) y)) return false;
+        }
+        return mAmbientPeekController.get().onSensorTap(x, y);
     }
 
     @Override
