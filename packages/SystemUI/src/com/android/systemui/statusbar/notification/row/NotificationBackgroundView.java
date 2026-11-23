@@ -39,6 +39,8 @@ import android.graphics.drawable.RippleDrawable;
 import android.provider.Settings;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.CrossWindowBlurListeners;
+import java.util.function.Consumer;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -97,6 +99,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private final int convexR = 9;
     private final int concaveR = 22;
     private BackgroundBlurDrawable mBackgroundBlurDrawable;
+    private BackgroundBlurDrawable mCardBlurDrawable;
+    private final Consumer<Boolean> mCardBlurListener = enabled -> updateCardBlur();
     @VisibleForTesting
     protected View.OnAttachStateChangeListener mOnAttachStateChangeListener;
     private boolean mAxBlurEnabled;
@@ -135,8 +139,48 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 "notification_card_color_second", Color.BLUE, UserHandle.USER_CURRENT);
         mCardStyle = Settings.System.getIntForUser(resolver,
                 "notification_card_style", 0, UserHandle.USER_CURRENT);
+        updateCardBlur();
+        invalidate();
+    }
+
+    private boolean usesCustomCardBlur() {
+        return mCardColorMode == 3 || mCardColorMode == 4;
+    }
+
+    private boolean customCardBlurAvailable() {
+        return usesCustomCardBlur() && mCardBlurDrawable != null
+                && CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
+    }
+
+    private void updateCardBlur() {
+        if (usesCustomCardBlur() && isAttachedToWindow() && mCardBlurDrawable == null
+                && getViewRootImpl() != null) {
+            mCardBlurDrawable = getViewRootImpl().createBackgroundBlurDrawable();
+            if (mCardBlurDrawable != null) {
+                mCardBlurDrawable.setBlurRadius(getResources().getDimensionPixelSize(
+                        R.dimen.notification_background_blur_radius));
+                mCardBlurDrawable.setXfermode(null);
+                mCardBlurDrawable.setColor(Color.TRANSPARENT);
+                mCardBlurDrawable.setCallback(this);
+                mCardBlurDrawable.setCornerRadius(mCornerRadii[0], mCornerRadii[1],
+                        mCornerRadii[2], mCornerRadii[3], mCornerRadii[4], mCornerRadii[5],
+                        mCornerRadii[6], mCornerRadii[7]);
+                mCardBlurDrawable.setAlpha(mDrawableAlpha);
+            }
+        }
+        if (mCardBlurDrawable != null) {
+            mCardBlurDrawable.setVisible(customCardBlurAvailable(), false);
+        }
         if (mBackground != null) setTint(mTintColor);
         invalidate();
+    }
+
+    private void drawCustomCardBlur(Canvas canvas, Rect bounds) {
+        if (customCardBlurAvailable() && bounds != null && !bounds.isEmpty()
+                && canvas.isHardwareAccelerated()) {
+            mCardBlurDrawable.setBounds(bounds);
+            mCardBlurDrawable.draw(canvas);
+        }
     }
 
     public NotificationBackgroundView(Context context, AttributeSet attrs) {
@@ -183,6 +227,9 @@ public class NotificationBackgroundView extends View implements Dumpable,
         Dependency.get(TunerService.class).addTunable(mCardAppearanceTunable,
                 "system:notification_card_color_mode", "system:notification_card_color_first",
                 "system:notification_card_color_second", "system:notification_card_style");
+        CrossWindowBlurListeners.getInstance().addListener(
+                getContext().getMainExecutor(), mCardBlurListener);
+        updateCardBlur();
         updateAxBlurOverlayColor();
         ScrimUtils scrimUtils = ScrimUtils.get(getContext());
         scrimUtils.addListener(mScrimListener);
@@ -193,6 +240,12 @@ public class NotificationBackgroundView extends View implements Dumpable,
     @Override
     protected void onDetachedFromWindow() {
         Dependency.get(TunerService.class).removeTunable(mCardAppearanceTunable);
+        CrossWindowBlurListeners.getInstance().removeListener(mCardBlurListener);
+        if (mCardBlurDrawable != null) {
+            mCardBlurDrawable.setVisible(false, false);
+            mCardBlurDrawable.setCallback(null);
+            mCardBlurDrawable = null;
+        }
         ScrimUtils.get().removeListener(mScrimListener);
         mAxBlurRenderer.onDetachedFromWindow();
         super.onDetachedFromWindow();
@@ -257,6 +310,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 mBackgroundBlurDrawable.setBounds(backgroundBounds);
                 mBackgroundBlurDrawable.draw(canvas);
             } else if (mBackground != null) {
+                drawCustomCardBlur(canvas, backgroundBounds);
                 boolean drewAxBlur = drawAxBlurBackground(canvas, backgroundBounds);
                 if (mCardColorMode != 0 || shouldDrawFallbackBackground(drewAxBlur)) {
                     mBackground.setBounds(backgroundBounds);
@@ -403,6 +457,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 right = (int) (left + actualWidth);
             }
             mBackgroundBounds.set(left, top, right, bottom);
+            if (drawable == mBackground) drawCustomCardBlur(canvas, mBackgroundBounds);
             boolean drewAxBlur = drawAxBlurBackground(canvas, mBackgroundBounds);
             if (mCardColorMode != 0 || shouldDrawFallbackBackground(drewAxBlur)) {
                 drawable.setBounds(left, top, right, bottom);
@@ -456,6 +511,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
     protected boolean verifyDrawable(Drawable who) {
         return super.verifyDrawable(who)
                 || who == mBackground
+                || who == mCardBlurDrawable
                 || mAxBlurRenderer.verifyDrawable(who);
     }
 
@@ -625,8 +681,14 @@ public class NotificationBackgroundView extends View implements Dumpable,
             GradientDrawable gradient = (GradientDrawable) baseLayer.mutate();
             gradient.setTintList(null);
             gradient.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
-            gradient.setColors(new int[] {mCardColorFirst,
-                    mCardColorMode == 2 ? mCardColorSecond : mCardColorFirst});
+            int first = mCardColorFirst;
+            int second = (mCardColorMode == 2 || mCardColorMode == 4)
+                    ? mCardColorSecond : mCardColorFirst;
+            if (customCardBlurAvailable()) {
+                first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), 160) << 24);
+                second = (second & 0x00ffffff) | (Math.min(Color.alpha(second), 160) << 24);
+            }
+            gradient.setColors(new int[] {first, second});
             mHadCustomCardColor = true;
         } else {
             if (mHadCustomCardColor && baseLayer instanceof GradientDrawable) {
@@ -740,6 +802,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
             return;
         }
         mBackground.setAlpha(drawableAlpha);
+        if (mCardBlurDrawable != null) mCardBlurDrawable.setAlpha(drawableAlpha);
         if (mBackgroundBlurDrawable != null) {
             mBackgroundBlurDrawable.setAlpha(drawableAlpha);
         }
@@ -787,6 +850,11 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 gradientDrawable.setCornerRadii(mCornerRadii);
             }
             updateFocusOverlayRadii(layerDrawable);
+        }
+        if (mCardBlurDrawable != null) {
+            mCardBlurDrawable.setCornerRadius(mCornerRadii[0], mCornerRadii[1],
+                    mCornerRadii[2], mCornerRadii[3], mCornerRadii[4], mCornerRadii[5],
+                    mCornerRadii[6], mCornerRadii[7]);
         }
         if (mBackgroundBlurDrawable != null) {
             mBackgroundBlurDrawable.setCornerRadius(mCornerRadii[0], mCornerRadii[1],
