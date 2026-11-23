@@ -4,6 +4,7 @@
  */
 package com.android.systemui.doze.ambientpeek
 
+import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -11,15 +12,18 @@ import android.graphics.Paint
 import android.graphics.Point
 import android.graphics.RectF
 import android.os.UserHandle
+import android.provider.Settings
 import android.text.TextUtils
 import android.view.View
 import com.android.systemui.res.R
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksIconPack
 import kotlin.math.max
 import kotlin.math.min
 
 /** Draws app icons and an outlined AOD preview; input is routed by the doze sensor host. */
 class AmbientPeekTapView(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val iconPack = RisingStacksIconPack(context)
     private var groups: List<AmbientPeekController.Group> = emptyList()
     private var selected: AmbientPeekController.AppKey? = null
     private var fingerprint: Point? = null
@@ -128,6 +132,9 @@ class AmbientPeekTapView(context: Context) : View(context) {
         paint.alpha = 190
         paint.textAlign = Paint.Align.CENTER
         paint.textSize = dp(10f)
+        val selectedPack = Settings.System.getStringForUser(
+            context.contentResolver, "rising_stacks_icon_pack", ActivityManager.getCurrentUser()
+        )
         current.forEachIndexed { i, group ->
             val x = firstX + i * dp(48f)
             hits.add(RectF(x, rowY, x + dp(48f), rowY + dp(48f)) to group.app)
@@ -135,7 +142,8 @@ class AmbientPeekTapView(context: Context) : View(context) {
                 val user = if (group.app.userId == UserHandle.USER_ALL) UserHandle.SYSTEM
                     else UserHandle.of(group.app.userId)
                 val app = context.createPackageContextAsUser(group.app.packageName, 0, user)
-                val original = app.applicationInfo.loadIcon(app.packageManager)
+                val original = iconPack.icon(selectedPack, app, group.app.packageName)
+                    ?: app.applicationInfo.loadIcon(app.packageManager)
                 val badged = app.packageManager.getUserBadgedIcon(original, user)
                 val icon = badged.constantState?.newDrawable()?.mutate() ?: badged.mutate()
                 icon.setBounds((x + dp(12f)).toInt(), (rowY + dp(3f)).toInt(),
