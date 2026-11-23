@@ -13,6 +13,9 @@ import android.graphics.Point
 import android.graphics.RectF
 import android.os.UserHandle
 import android.provider.Settings
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import android.text.TextUtils
 import android.view.View
 import com.android.systemui.res.R
@@ -169,34 +172,54 @@ class AmbientPeekTapView(context: Context) : View(context) {
 
     private fun drawPreview(canvas: Canvas, group: AmbientPeekController.Group, top: Float,
         safeBottom: Float) {
-        if (top + dp(55f) > safeBottom) return
         val left = dp(24f)
         val right = width - dp(24f)
-        val bottom = min(safeBottom, top + dp(130f))
+        val padding = dp(12f)
+        val textWidth = (right - left - 2 * padding).toInt()
+        val availableHeight = safeBottom - top - 2 * padding
+        if (textWidth <= 0 || availableHeight <= 0f) return
+
+        val content = group.previews.mapNotNull { preview ->
+            val title = if (preview.redacted) context.getString(R.string.ambient_peek_hidden)
+                else preview.title
+            val body = if (preview.redacted) "" else preview.body
+            listOf(title, body).filter { it.isNotBlank() }.joinToString("\n")
+                .takeIf { it.isNotEmpty() }
+        }.joinToString("\n\n").let {
+            if (group.count > group.previews.size) "$it\n…" else it
+        }
+        if (content.isBlank()) return
+
+        val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            alpha = 190
+            textSize = dp(13f)
+        }
+        val spacing = dp(2f)
+        val metrics = textPaint.fontMetrics
+        val lineHeight = kotlin.math.ceil(metrics.descent - metrics.ascent + spacing).toInt()
+        val maxLines = (availableHeight / lineHeight).toInt()
+        if (maxLines < 1) return
+        val layout = StaticLayout.Builder.obtain(content, 0, content.length, textPaint, textWidth)
+            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setIncludePad(false)
+            .setLineSpacing(spacing, 1f)
+            .setMaxLines(maxLines)
+            .setEllipsize(TextUtils.TruncateAt.END)
+            .setEllipsizedWidth(textWidth)
+            .build()
+        val bottom = top + 2 * padding + layout.height
+        if (bottom > safeBottom) return
+
         paint.color = Color.WHITE
         paint.alpha = 150
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = dp(1f)
         canvas.drawRoundRect(left, top, right, bottom, dp(12f), dp(12f), paint)
         paint.style = Paint.Style.FILL
-        paint.textAlign = Paint.Align.LEFT
-        paint.textSize = dp(13f)
-        var y = top + dp(22f)
-        val availableWidth = right - left - dp(24f)
-        for (preview in group.previews) {
-            if (y > bottom - dp(8f)) break
-            val title = if (preview.redacted) context.getString(R.string.ambient_peek_hidden)
-                else preview.title
-            if (title.isNotEmpty()) {
-                canvas.drawText(TextUtils.ellipsize(title, android.text.TextPaint(paint),
-                    availableWidth, TextUtils.TruncateAt.END).toString(), left + dp(12f), y, paint)
-                y += dp(20f)
-            }
-            if (!preview.redacted && preview.body.isNotEmpty() && y <= bottom - dp(8f)) {
-                canvas.drawText(TextUtils.ellipsize(preview.body, android.text.TextPaint(paint),
-                    availableWidth, TextUtils.TruncateAt.END).toString(), left + dp(12f), y, paint)
-                y += dp(20f)
-            }
-        }
+        canvas.save()
+        canvas.translate(left + padding, top + padding)
+        layout.draw(canvas)
+        canvas.restore()
     }
 }
