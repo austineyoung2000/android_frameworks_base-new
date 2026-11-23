@@ -59,6 +59,7 @@ class AmbientPeekController @Inject constructor(
     private var view = WeakReference<AmbientPeekTapView>(null)
     private var enabled = false
     private var durationMs = 8000L
+    private var maxApps = 6
     private var initialized = false
     // Do not expose notification content until both bouncer state flows have reported.
     private var bouncerShowing = true
@@ -105,6 +106,10 @@ class AmbientPeekController @Inject constructor(
                 durationMs = (value?.toIntOrNull() ?: 8).coerceIn(3, 30) * 1000L
                 resetAndRender()
             }, "system:ambient_peek_duration")
+            tuner.addTunable({ _, value ->
+                maxApps = (value?.toIntOrNull() ?: 6).coerceIn(2, 6)
+                render()
+            }, "system:ambient_peek_max_apps")
         }
         render()
     }
@@ -145,7 +150,8 @@ class AmbientPeekController @Inject constructor(
                 !entry.isRowDismissed && !entry.ranking.isSuspended &&
                 !entry.shouldSuppressAmbient() &&
                 !visibility.shouldHideNotificationOnKeyguard(entry)
-        }.sortedBy { it.ranking.rank }
+        }.sortedWith(compareByDescending<NotificationEntry> { it.sbn.postTime }
+            .thenBy { it.ranking.rank })
         val children = entries.filter { !it.sbn.notification.isGroupSummary }
             .map { it.sbn.groupKey }.toSet()
         val counts = LinkedHashMap<AppKey, MutableList<Preview>>()
@@ -164,7 +170,9 @@ class AmbientPeekController @Inject constructor(
                 n.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty().take(8192)
             counts.getOrPut(key) { ArrayList() }.add(Preview(title, text, isRedacted))
         }
-        return counts.map { (key, entries) -> Group(key, entries.size, entries.take(50)) }
+        return counts.entries.take(maxApps).map { (key, entries) ->
+            Group(key, entries.size, entries.take(50))
+        }
     }
 
     private fun resetAndRender() {
