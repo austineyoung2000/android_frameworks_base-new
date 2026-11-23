@@ -19,6 +19,10 @@
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import android.content.Context
+import android.view.View
+import android.view.CrossWindowBlurListeners
+import com.android.internal.graphics.drawable.BackgroundBlurDrawable
+import java.util.function.Consumer
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
@@ -63,6 +67,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -78,11 +83,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -298,7 +307,7 @@ fun ContentScope.Tile(
         }
 
         TileExpandable(
-            color = { animatedColor },
+            color = { if (qsTileUsesBlur(labelColors, uiState.visualState)) Color.Transparent else animatedColor },
             shape = tileShape,
             squishiness = if (iconOnly) { { 1f } } else squishiness,
             hapticsViewModel = hapticsViewModel,
@@ -375,7 +384,7 @@ fun ContentScope.Tile(
                 iconOnly = iconOnly,
                 isDualTarget = uiState.handlesToggleClick,
                 modifier = contentRevealModifier
-                    .then(qsTileBackgroundModifier(labelColors, uiState.visualState))
+                    .then(qsTileBackgroundModifier(labelColors, uiState.visualState, tileShape))
                     .then(qsTileStyleModifier(labelColors.tileStyle, uiState.visualState, tileShape)),
             ) {
                 val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
@@ -538,6 +547,8 @@ internal data class CustomLabelColors(
     val activeGradientEnd: Color?,
     val inactiveBackground: Color?,
     val inactiveGradientEnd: Color?,
+    val activeEffect: Int,
+    val inactiveEffect: Int,
 )
 
 @Composable
@@ -552,6 +563,13 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             return if (enabled) Color(Settings.System.getIntForUser(
                 resolver, colorKey, fallback, UserHandle.USER_CURRENT
             )) else null
+        }
+        fun rawColor(key: String, fallback: Int) = Color(Settings.System.getIntForUser(resolver, key, fallback, UserHandle.USER_CURRENT))
+        fun effect(kind: String): Int {
+            val configured = Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_effect", -1, UserHandle.USER_CURRENT)
+            if (configured in 0..4) return configured
+            if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_color_enabled", 0, UserHandle.USER_CURRENT) == 0) return 0
+            return if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_gradient_enabled", 0, UserHandle.USER_CURRENT) != 0) 2 else 1
         }
         return CustomLabelColors(
             active = color("qs_active_label_color_enabled", "qs_active_label_color", 0xff000000.toInt()),
@@ -570,22 +588,12 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             tileStyle = Settings.System.getIntForUser(
                 resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT
             ),
-            activeBackground = color(
-                "qs_active_background_color_enabled", "qs_active_background_color",
-                0xff6200ee.toInt()
-            ),
-            activeGradientEnd = color(
-                "qs_active_gradient_enabled", "qs_active_gradient_end_color",
-                0xff0000ff.toInt()
-            ),
-            inactiveBackground = color(
-                "qs_inactive_background_color_enabled", "qs_inactive_background_color",
-                0xff55555f.toInt()
-            ),
-            inactiveGradientEnd = color(
-                "qs_inactive_gradient_enabled", "qs_inactive_gradient_end_color",
-                0xff0000ff.toInt()
-            ),
+            activeBackground = if (effect("active") == 0) null else rawColor("qs_active_background_color", 0xff6200ee.toInt()),
+            activeGradientEnd = if (effect("active") in listOf(2, 4)) rawColor("qs_active_gradient_end_color", 0xff0000ff.toInt()) else null,
+            inactiveBackground = if (effect("inactive") == 0) null else rawColor("qs_inactive_background_color", 0xff55555f.toInt()),
+            inactiveGradientEnd = if (effect("inactive") in listOf(2, 4)) rawColor("qs_inactive_gradient_end_color", 0xff0000ff.toInt()) else null,
+            activeEffect = effect("active"),
+            inactiveEffect = effect("inactive"),
         )
     }
     val colors = remember(context) { mutableStateOf(readColors()) }
@@ -601,6 +609,7 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
             "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
             "qs_tile_shape", "qs_compose_tile_style",
+            "qs_active_background_effect", "qs_inactive_background_effect",
             "qs_active_background_color_enabled", "qs_active_background_color",
             "qs_active_gradient_enabled", "qs_active_gradient_end_color",
             "qs_inactive_background_color_enabled", "qs_inactive_background_color",
@@ -629,24 +638,107 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
  * Draw custom fills inside the tile's existing shape and beneath its style and content.
  * Disabled and unavailable tiles retain the colors selected by SystemUI.
  */
-internal fun qsTileBackgroundModifier(settings: CustomLabelColors, state: Int): Modifier {
+
+internal fun qsTileUsesBlur(settings: CustomLabelColors, state: Int): Boolean =
+    when (state) {
+        STATE_ACTIVE -> settings.activeEffect in 3..4
+        STATE_INACTIVE -> settings.inactiveEffect in 3..4
+        else -> false
+    }
+
+@Composable
+internal fun qsTileBackgroundModifier(
+    settings: CustomLabelColors,
+    state: Int,
+    shape: RoundedCornerShape,
+): Modifier {
     val start = when (state) {
         STATE_ACTIVE -> settings.activeBackground
         STATE_INACTIVE -> settings.inactiveBackground
         else -> null
-    } ?: return Modifier
-
+    }
     val end = when (state) {
         STATE_ACTIVE -> settings.activeGradientEnd
         STATE_INACTIVE -> settings.inactiveGradientEnd
         else -> null
     }
-    return Modifier.drawBehind {
-        if (end != null) {
-            drawRect(brush = Brush.horizontalGradient(listOf(start, end)))
-        } else {
-            drawRect(color = start)
+    val wantsBlur = start != null && qsTileUsesBlur(settings, state)
+    val view = LocalView.current
+    var blur by remember(view) { mutableStateOf<BackgroundBlurDrawable?>(null) }
+    var blurSupported by remember(view) { mutableStateOf(false) }
+    DisposableEffect(view, wantsBlur) {
+        val listeners = CrossWindowBlurListeners.getInstance()
+        fun updateSupport(enabled: Boolean) {
+            blurSupported = enabled
+            blur?.setVisible(enabled && wantsBlur, false)
         }
+        val callback = Consumer<Boolean> { updateSupport(it) }
+        val attachment = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                if (wantsBlur && blur == null) {
+                    blur = v.viewRootImpl?.createBackgroundBlurDrawable()?.apply {
+                        setBlurRadius(v.resources.getDimensionPixelSize(R.dimen.notification_background_blur_radius))
+                        setXfermode(null)
+                        setColor(android.graphics.Color.TRANSPARENT)
+                    }
+                }
+            }
+            override fun onViewDetachedFromWindow(v: View) {
+                blur?.setVisible(false, false)
+                blur = null
+            }
+        }
+        if (wantsBlur) {
+            listeners.addListener(view.context.mainExecutor, callback)
+            view.addOnAttachStateChangeListener(attachment)
+            if (view.isAttachedToWindow) attachment.onViewAttachedToWindow(view)
+            blurSupported = listeners.isCrossWindowBlurEnabled
+        }
+        onDispose {
+            if (wantsBlur) {
+                listeners.removeListener(callback)
+                view.removeOnAttachStateChangeListener(attachment)
+            }
+            blur?.setVisible(false, false)
+            blur = null
+        }
+    }
+    if (start == null) return Modifier
+    val currentBlur = blur
+    val activeBlur = wantsBlur && blurSupported && currentBlur != null
+    return Modifier.drawBehind {
+        var drewBlur = false
+        if (activeBlur) {
+            drawIntoCanvas { canvas ->
+                val drawable = currentBlur ?: return@drawIntoCanvas
+                if (canvas.nativeCanvas.isHardwareAccelerated) {
+                    val outline = shape.createOutline(size, layoutDirection, this)
+                    if (outline is Outline.Rectangle) {
+                        drawable.setCornerRadius(0f)
+                        drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
+                        drawable.setVisible(true, false)
+                        drawable.draw(canvas.nativeCanvas)
+                        drewBlur = true
+                    } else if (outline is Outline.Rounded) {
+                        val rr = outline.roundRect
+                        drawable.setCornerRadius(
+                            rr.topLeftCornerRadius.x, rr.topLeftCornerRadius.y,
+                            rr.topRightCornerRadius.x, rr.topRightCornerRadius.y,
+                            rr.bottomLeftCornerRadius.x, rr.bottomLeftCornerRadius.y,
+                            rr.bottomRightCornerRadius.x, rr.bottomRightCornerRadius.y,
+                        )
+                        drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
+                        drawable.setVisible(true, false)
+                        drawable.draw(canvas.nativeCanvas)
+                        drewBlur = true
+                    }
+                }
+            }
+        }
+        val first = if (drewBlur) start.copy(alpha = minOf(start.alpha, 0.63f)) else start
+        val last = if (drewBlur) end?.copy(alpha = minOf(end.alpha, 0.63f)) else end
+        if (last != null) drawRect(brush = Brush.horizontalGradient(listOf(first, last)))
+        else drawRect(color = first)
     }
 }
 

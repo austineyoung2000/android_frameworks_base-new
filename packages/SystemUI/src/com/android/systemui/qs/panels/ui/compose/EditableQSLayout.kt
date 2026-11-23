@@ -155,6 +155,7 @@ import com.android.systemui.qs.panels.shared.model.SectionType
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.InactiveCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.EditModeTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileUsesBlur
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
@@ -1958,6 +1959,7 @@ fun DraggableTile(
         Tile.STATE_INACTIVE -> customTileColors.inactiveBackground
         else -> null
     }
+    val customTileBlur = qsTileUsesBlur(customTileColors, visualState)
     val customPrimaryLabel = when (visualState) {
         Tile.STATE_ACTIVE -> customTileColors.active
         Tile.STATE_INACTIVE -> customTileColors.inactive
@@ -1993,7 +1995,9 @@ fun DraggableTile(
     } else {
         RoundedCornerShape(percent = 50) 
     }
-    val expandableColor = if (useAospStyle) {
+    val expandableColor = if (customTileBlur) {
+        Color.Transparent
+    } else if (useAospStyle) {
         if (isActive) MaterialTheme.colorScheme.primary else EditModeTileDefaults.editTileColors().background
     } else {
         tileBackgroundColor
@@ -2106,13 +2110,13 @@ fun DraggableTile(
                         ) else Modifier
                     ),
                 shape = RoundedCornerShape(InactiveCornerRadius),
-                color = aospBackground,
+                color = if (customTileBlur) Color.Transparent else aospBackground,
                 shadowElevation = if (isResizing) 0.dp else elevation,
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(qsTileBackgroundModifier(customTileColors, visualState))
+                        .then(qsTileBackgroundModifier(customTileColors, visualState, RoundedCornerShape(InactiveCornerRadius)))
                         .then(qsTileStyleModifier(
                             customTileColors.tileStyle, visualState, RoundedCornerShape(InactiveCornerRadius)
                         ))
@@ -2215,7 +2219,7 @@ fun DraggableTile(
                     } else {
                         BoxWithConstraints(
                             modifier = Modifier.fillMaxSize()
-                                .then(qsTileBackgroundModifier(customTileColors, visualState)),
+                                .then(qsTileBackgroundModifier(customTileColors, visualState, RoundedCornerShape(percent = 50))),
                             contentAlignment = Alignment.Center
                         ) {
                             val tileWidth    = maxWidth
