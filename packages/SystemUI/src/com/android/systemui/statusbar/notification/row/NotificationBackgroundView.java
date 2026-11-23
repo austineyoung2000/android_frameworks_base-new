@@ -169,7 +169,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
             }
         }
         if (mCardBlurDrawable != null) {
-            mCardBlurDrawable.setVisible(customCardBlurAvailable(), false);
+            mCardBlurDrawable.setVisible(customCardBlurAvailable() && isShown(), false);
         }
         if (mBackground != null) setTint(mTintColor);
         invalidate();
@@ -255,6 +255,9 @@ public class NotificationBackgroundView extends View implements Dumpable,
     public void onVisibilityAggregated(boolean isVisible) {
         super.onVisibilityAggregated(isVisible);
         mAxBlurRenderer.onVisibilityAggregated(isVisible);
+        if (mCardBlurDrawable != null) {
+            mCardBlurDrawable.setVisible(isVisible && customCardBlurAvailable(), false);
+        }
     }
 
     @Override
