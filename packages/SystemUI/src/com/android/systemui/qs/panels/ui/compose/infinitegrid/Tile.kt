@@ -238,14 +238,16 @@ fun ContentScope.Tile(
             STATE_INACTIVE -> labelColors.inactiveSecondary
             else -> null
         }
-        val colors = if (!iconOnly) {
-            defaultColors.copy(
-                label = customLabel ?: defaultColors.label,
-                secondaryLabel = customSecondaryLabel ?: defaultColors.secondaryLabel,
-            )
-        } else {
-            defaultColors
+        val customIcon = when (uiState.visualState) {
+            STATE_ACTIVE -> labelColors.activeIcon
+            STATE_INACTIVE -> labelColors.inactiveIcon
+            else -> null
         }
+        val colors = defaultColors.copy(
+            icon = customIcon ?: defaultColors.icon,
+            label = if (iconOnly) defaultColors.label else customLabel ?: defaultColors.label,
+            secondaryLabel = if (iconOnly) defaultColors.secondaryLabel else customSecondaryLabel ?: defaultColors.secondaryLabel,
+        )
         val hapticsViewModel: TileHapticsViewModel =
             rememberViewModel(traceName = "TileHapticsViewModel") {
                 tileHapticsViewModelFactory.create(tile)
@@ -541,6 +543,8 @@ internal data class CustomLabelColors(
     val inactive: Color?,
     val activeSecondary: Color?,
     val inactiveSecondary: Color?,
+    val activeIcon: Color?,
+    val inactiveIcon: Color?,
     val tileShape: Int,
     val tileStyle: Int,
     val activeBackground: Color?,
@@ -582,6 +586,8 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
                 "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
                 0xffffffff.toInt()
             ),
+            activeIcon = color("qs_active_icon_color_enabled", "qs_active_icon_color", 0xffffffff.toInt()),
+            inactiveIcon = color("qs_inactive_icon_color_enabled", "qs_inactive_icon_color", 0xffffffff.toInt()),
             tileShape = Settings.System.getIntForUser(
                 resolver, "qs_tile_shape", 0, UserHandle.USER_CURRENT
             ),
@@ -608,6 +614,8 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_inactive_label_color_enabled", "qs_inactive_label_color",
             "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
             "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
+            "qs_active_icon_color_enabled", "qs_active_icon_color",
+            "qs_inactive_icon_color_enabled", "qs_inactive_icon_color",
             "qs_tile_shape", "qs_compose_tile_style",
             "qs_active_background_effect", "qs_inactive_background_effect",
             "qs_active_background_color_enabled", "qs_active_background_color",

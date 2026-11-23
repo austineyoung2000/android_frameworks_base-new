@@ -1960,6 +1960,11 @@ fun DraggableTile(
         else -> null
     }
     val customTileBlur = qsTileUsesBlur(customTileColors, visualState)
+    val customIconColor = when (visualState) {
+        Tile.STATE_ACTIVE -> customTileColors.activeIcon
+        Tile.STATE_INACTIVE -> customTileColors.inactiveIcon
+        else -> null
+    }
     val customPrimaryLabel = when (visualState) {
         Tile.STATE_ACTIVE -> customTileColors.active
         Tile.STATE_INACTIVE -> customTileColors.inactive
@@ -1984,7 +1989,7 @@ fun DraggableTile(
         isActive || state?.state == Tile.STATE_INACTIVE -> if (isDark) Color.White else Color.Black
         else -> if (isDark) Color.White.copy(alpha = 0.38f) else Color.Black.copy(alpha = 0.38f)
     }
-    val iconColor = when {
+    val iconColor = customIconColor ?: when {
         isActive -> MaterialTheme.colorScheme.onPrimary
         state?.state == Tile.STATE_INACTIVE -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
@@ -2090,7 +2095,7 @@ fun DraggableTile(
         } else if (useAospStyle) {
             val aospColors = EditModeTileDefaults.editTileColors()
             val aospBackground = if (isActive) MaterialTheme.colorScheme.primary else aospColors.background
-            val aospIconColor = if (isActive) MaterialTheme.colorScheme.onPrimary else aospColors.icon
+            val aospIconColor = customIconColor ?: if (isActive) MaterialTheme.colorScheme.onPrimary else aospColors.icon
             val aospLabelColor =
                 customPrimaryLabel ?: if (isActive) MaterialTheme.colorScheme.onPrimary else aospColors.label
 
