@@ -37,6 +37,7 @@ class RisingStacksController @Inject constructor(
     val state: StateFlow<UiState> = mutableState
     private var enabled = false
     private var selected: RisingStacksModel.AppKey? = null
+    private var allSelectedByUser = false
     private var iconPack: String? = null
     private var attached = false
     private var visibleGroups: List<RisingStacksModel.AppGroup> = emptyList()
@@ -62,7 +63,10 @@ class RisingStacksController @Inject constructor(
         pipeline.addFinalizeFilter(filter)
         statusBarStateController.addCallback(object : StatusBarStateController.StateListener {
             override fun onStateChanged(newState: Int) {
-                if (newState != StatusBarState.KEYGUARD) selected = null
+                if (newState != StatusBarState.KEYGUARD) {
+                    selected = null
+                    allSelectedByUser = false
+                }
                 publish()
                 filter.invalidateList("Rising Stacks lock screen state changed")
             }
@@ -76,6 +80,7 @@ class RisingStacksController @Inject constructor(
             enabled = TunerService.parseIntegerSwitch(value, false)
             // Tuner replays settings on user changes. Never retain another user's icons or selection.
             selected = null
+            allSelectedByUser = false
             visibleGroups = emptyList()
             publish()
             filter.invalidateList("Rising Stacks setting changed")
@@ -89,7 +94,8 @@ class RisingStacksController @Inject constructor(
     fun select(app: RisingStacksModel.AppKey?) {
         if (!enabled || !onLockscreen()) return
         if (app != null && visibleGroups.none { it.app == app }) return
-        if (selected == app) return
+        if (selected == app && allSelectedByUser == (app == null)) return
+        allSelectedByUser = app == null
         selected = app
         publish()
         filter.invalidateList("Rising Stacks selection changed")
@@ -108,7 +114,7 @@ class RisingStacksController @Inject constructor(
             val sbn = entry.sbn
             eligible.add(RisingStacksModel.Entry(
                 entry.key, keyFor(entry), sbn.groupKey,
-                sbn.notification.isGroupSummary, entry.ranking.rank
+                sbn.notification.isGroupSummary, entry.ranking.rank, sbn.postTime
             ))
         }
         fun visit(entry: PipelineEntry) {
@@ -124,7 +130,8 @@ class RisingStacksController @Inject constructor(
         }
         entries.forEach(::visit)
         val snapshot = RisingStacksModel.build(eligible, selected)
-        selected = snapshot.selectedApp
+        selected = if (allSelectedByUser) null else
+            snapshot.selectedApp ?: snapshot.apps.firstOrNull()?.app
         visibleGroups = snapshot.apps
         publish()
     }
