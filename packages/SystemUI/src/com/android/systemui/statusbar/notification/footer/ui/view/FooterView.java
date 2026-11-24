@@ -391,10 +391,10 @@ public class FooterView extends StackScrollerDecorView {
         int cardStyle = Settings.System.getIntForUser(mContext.getContentResolver(),
                 "notification_card_style", 0, UserHandle.USER_CURRENT);
         int buttonContentColor = onSurface;
-        if (colorMode == 1 || colorMode == 2) {
+        if (colorMode >= 1 && colorMode <= 4) {
             int first = Settings.System.getIntForUser(mContext.getContentResolver(),
                     "notification_card_color_first", Color.MAGENTA, UserHandle.USER_CURRENT);
-            int second = colorMode == 2 ? Settings.System.getIntForUser(
+            int second = (colorMode == 2 || colorMode == 4) ? Settings.System.getIntForUser(
                     mContext.getContentResolver(), "notification_card_color_second",
                     Color.BLUE, UserHandle.USER_CURRENT) : first;
             clearAllBg = makeCardBackground(first, second);
