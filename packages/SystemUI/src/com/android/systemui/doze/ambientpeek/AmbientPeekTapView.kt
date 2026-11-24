@@ -113,8 +113,20 @@ class AmbientPeekTapView(context: Context) : View(context) {
         } ?: 0f
         val minute = android.os.SystemClock.elapsedRealtime() / 60000L
         val jitter = ((minute % 3).toInt() - 1) * dp(2f)
+        val maxApps = Settings.System.getIntForUser(
+            context.contentResolver, "ambient_peek_max_apps", 6, ActivityManager.getCurrentUser()
+        ).coerceIn(2, 6)
+        val iconScale = Settings.System.getIntForUser(
+            context.contentResolver, "ambient_peek_icon_size", 100, ActivityManager.getCurrentUser()
+        ).coerceIn(100, 200) / 100f
+        val availableWidth = (width - dp(32f)).coerceAtLeast(0f)
+        // Size against the configured maximum, so incoming apps do not resize existing icons.
+        val maxIcon = (availableWidth / maxApps - dp(12f)).coerceAtLeast(dp(24f))
+        val iconSize = min(dp(24f) * iconScale, min(dp(64f), maxIcon))
+        val cellWidth = max(dp(48f), iconSize + dp(12f))
+        val rowHeight = max(dp(48f), iconSize + dp(24f))
         val wanted = max(height * 0.38f, anchorBottom + dp(12f)) + jitter
-        val rowY = min(wanted, safeBottom - dp(152f))
+        val rowY = min(wanted, safeBottom - rowHeight - dp(104f))
         // If the sensor or available area leaves no safe space, hide rather than overlap.
         if (rowY < dp(96f) || rowY < anchorBottom || safeBottom > height
             || width < dp(100f)) {
@@ -123,14 +135,14 @@ class AmbientPeekTapView(context: Context) : View(context) {
         }
         setReady(true)
         postInvalidateDelayed(60000L)
-        val slots = max(2, (width / dp(48f)).toInt().coerceAtMost(8))
+        val slots = max(2, (availableWidth / cellWidth).toInt().coerceAtMost(8))
         val perPage = if (groups.size > slots) slots - 1 else slots
         val pages = (groups.size + perPage - 1) / perPage
         page %= pages
         val current = groups.drop(page * perPage).take(perPage)
         val needsPageButton = pages > 1
         val visibleCount = current.size + if (needsPageButton) 1 else 0
-        val firstX = (width - visibleCount * dp(48f)) / 2f
+        val firstX = (width - visibleCount * cellWidth) / 2f
         paint.color = Color.WHITE
         paint.alpha = 190
         paint.textAlign = Paint.Align.CENTER
@@ -139,8 +151,8 @@ class AmbientPeekTapView(context: Context) : View(context) {
             context.contentResolver, "ambient_peek_icon_pack", ActivityManager.getCurrentUser()
         )
         current.forEachIndexed { i, group ->
-            val x = firstX + i * dp(48f)
-            hits.add(RectF(x, rowY, x + dp(48f), rowY + dp(48f)) to group.app)
+            val x = firstX + i * cellWidth
+            hits.add(RectF(x, rowY, x + cellWidth, rowY + rowHeight) to group.app)
             try {
                 val user = if (group.app.userId == UserHandle.USER_ALL) UserHandle.SYSTEM
                     else UserHandle.of(group.app.userId)
@@ -149,24 +161,26 @@ class AmbientPeekTapView(context: Context) : View(context) {
                     ?: app.applicationInfo.loadIcon(app.packageManager)
                 val badged = app.packageManager.getUserBadgedIcon(original, user)
                 val icon = badged.constantState?.newDrawable()?.mutate() ?: badged.mutate()
-                icon.setBounds((x + dp(12f)).toInt(), (rowY + dp(3f)).toInt(),
-                    (x + dp(36f)).toInt(), (rowY + dp(27f)).toInt())
+                val iconLeft = x + (cellWidth - iconSize) / 2f
+                icon.setBounds(iconLeft.toInt(), (rowY + dp(3f)).toInt(),
+                    (iconLeft + iconSize).toInt(), (rowY + dp(3f) + iconSize).toInt())
                 icon.draw(canvas)
             } catch (_: Exception) {
                 paint.style = Paint.Style.STROKE
-                canvas.drawCircle(x + dp(24f), rowY + dp(15f), dp(9f), paint)
+                canvas.drawCircle(x + cellWidth / 2f, rowY + dp(3f) + iconSize / 2f,
+                    iconSize * 0.375f, paint)
                 paint.style = Paint.Style.FILL
             }
             canvas.drawText(if (group.count > 99) "99+" else group.count.toString(),
-                x + dp(24f), rowY + dp(42f), paint)
+                x + cellWidth / 2f, rowY + dp(18f) + iconSize, paint)
         }
         if (needsPageButton) {
-            val x = firstX + current.size * dp(48f)
-            nextPage = RectF(x, rowY, x + dp(48f), rowY + dp(48f))
-            canvas.drawText("•••", x + dp(24f), rowY + dp(24f), paint)
+            val x = firstX + current.size * cellWidth
+            nextPage = RectF(x, rowY, x + cellWidth, rowY + rowHeight)
+            canvas.drawText("•••", x + cellWidth / 2f, rowY + rowHeight / 2f, paint)
         }
         current.firstOrNull { it.app == selected }?.let {
-            drawPreview(canvas, it, rowY + dp(56f), safeBottom)
+            drawPreview(canvas, it, rowY + rowHeight + dp(8f), safeBottom)
         }
     }
 
