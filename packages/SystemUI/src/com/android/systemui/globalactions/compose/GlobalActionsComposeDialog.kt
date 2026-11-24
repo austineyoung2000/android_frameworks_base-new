@@ -22,6 +22,9 @@ import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.os.Bundle
 import android.os.PowerManager
+import android.view.CrossWindowBlurListeners
+import android.os.UserHandle
+import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.WindowManager
@@ -60,7 +63,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -80,6 +85,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.core.graphics.drawable.toBitmap
 import com.android.systemui.globalactions.GlobalActionsDialogLite
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
+import android.service.quicksettings.Tile.STATE_ACTIVE
 import com.android.systemui.statusbar.BlurUtils
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
@@ -231,6 +238,11 @@ class GlobalActionsComposeDialog(
             
             setContent {
                 MaterialExpressiveTheme {
+                    CompositionLocalProvider(
+                        LocalPowerBackdropBlur provides
+                            (blurUtils.supportsBlursOnWindows() &&
+                                CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled)
+                    ) {
                     GlobalActionsScreen(
                         actions = actions,
                         restartActions = restartActions,
@@ -241,6 +253,7 @@ class GlobalActionsComposeDialog(
                             dismiss()
                         }
                     )
+                    }
                 }
             }
         }
@@ -277,6 +290,51 @@ class GlobalActionsComposeDialog(
         }
         super.dismiss()
     }
+}
+
+private val LocalPowerBackdropBlur = staticCompositionLocalOf { false }
+
+private data class PowerTileAppearance(
+    val style: Int,
+    val effect: Int,
+    val first: Color,
+    val second: Color,
+    val useBlur: Boolean,
+)
+
+@Composable
+private fun rememberPowerTileAppearance(): PowerTileAppearance {
+    val context = LocalContext.current
+    val backdrop = LocalPowerBackdropBlur.current
+    return remember(context, backdrop) {
+        val resolver = context.contentResolver
+        val style = Settings.System.getIntForUser(resolver, "power_menu_tile_style", 0,
+            UserHandle.USER_CURRENT).coerceIn(0, 7)
+        val effect = Settings.System.getIntForUser(resolver, "power_menu_tile_color_effect", 0,
+            UserHandle.USER_CURRENT).coerceIn(0, 4)
+        val first = Color(Settings.System.getIntForUser(resolver, "power_menu_tile_color_first",
+            0xff6200ee.toInt(), UserHandle.USER_CURRENT))
+        val second = Color(Settings.System.getIntForUser(resolver, "power_menu_tile_color_second",
+            0xff0000ff.toInt(), UserHandle.USER_CURRENT))
+        PowerTileAppearance(style, effect, first, second, effect in 3..4 && backdrop)
+    }
+}
+
+private fun PowerTileAppearance.backgroundModifier(shape: RoundedCornerShape): Modifier {
+    if (effect == 0) return Modifier.then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
+    val firstColor = if (useBlur) first.copy(alpha = minOf(first.alpha, 0.63f)) else first
+    val last = if (effect == 2 || effect == 4) second else first
+    val lastColor = if (useBlur) last.copy(alpha = minOf(last.alpha, 0.63f)) else last
+    return Modifier.background(Brush.horizontalGradient(listOf(firstColor, lastColor)), shape)
+        .then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
+}
+
+private fun PowerTileAppearance.contentColor(native: Color): Color {
+    if (effect == 0) return native
+    val last = if (effect == 2 || effect == 4) second else first
+    val brightness = (android.graphics.Color.luminance(first.toArgb()) +
+        android.graphics.Color.luminance(last.toArgb())) / 2f
+    return if (brightness > 0.5f) Color.Black else Color.White
 }
 
 @Composable
@@ -698,14 +756,18 @@ private fun RestartOptionTile(
         action.getIcon(context)?.toBitmap(96, 96)?.asImageBitmap()
     }
 
+    val appearance = rememberPowerTileAppearance()
+    val tileShape = RoundedCornerShape(24.dp)
+    val iconColor = appearance.contentColor(MaterialTheme.colorScheme.primary)
+    val textColor = appearance.contentColor(MaterialTheme.colorScheme.onSurfaceVariant)
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = tileShape,
+        color = if (appearance.effect == 0) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
         modifier = modifier.height(100.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(12.dp),
+            modifier = Modifier.fillMaxSize().then(appearance.backgroundModifier(tileShape)).padding(12.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -713,14 +775,14 @@ private fun RestartOptionTile(
                 Icon(
                     bitmap = iconBitmap,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = iconColor,
                     modifier = Modifier.size(32.dp)
                 )
             } else {
                 Icon(
                     imageVector = Icons.Rounded.Refresh,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = iconColor,
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -729,7 +791,7 @@ private fun RestartOptionTile(
                 text = label,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = textColor,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 modifier = Modifier.basicMarquee()
@@ -1191,14 +1253,15 @@ private fun TileItem(
         tile.action.getIcon(context)?.toBitmap(96, 96)?.asImageBitmap()
     }
 
-    val backgroundColor = when {
-        isEmergency -> MaterialTheme.colorScheme.errorContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val contentColor = when {
-        isEmergency -> MaterialTheme.colorScheme.onErrorContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val appearance = rememberPowerTileAppearance()
+    val tileShape = RoundedCornerShape(24.dp)
+    val nativeBackground = if (isEmergency) MaterialTheme.colorScheme.errorContainer
+        else MaterialTheme.colorScheme.surfaceVariant
+    val backgroundColor = if (appearance.effect == 0) nativeBackground else Color.Transparent
+    val contentColor = appearance.contentColor(
+        if (isEmergency) MaterialTheme.colorScheme.onErrorContainer
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    )
 
     val currentOnDragStart by rememberUpdatedState(onDragStart)
     val currentOnDragEnd by rememberUpdatedState(onDragEnd)
@@ -1221,10 +1284,11 @@ private fun TileItem(
             onClick = onClick,
             enabled = !isEditMode,
             modifier = Modifier.fillMaxSize().pointerInput(Unit) { },
-            shape = RoundedCornerShape(24.dp),
+            shape = tileShape,
             color = backgroundColor,
             border = if(isEditMode) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha=0.5f)) else null
         ) {
+            Box(modifier = Modifier.fillMaxSize().then(appearance.backgroundModifier(tileShape))) {
             if (tile.spanCols == 1) {
                 Box(
                     modifier = Modifier.fillMaxSize().padding(8.dp),
@@ -1261,6 +1325,7 @@ private fun TileItem(
                             .basicMarquee()
                     )
                 }
+            }
             }
         }
 
