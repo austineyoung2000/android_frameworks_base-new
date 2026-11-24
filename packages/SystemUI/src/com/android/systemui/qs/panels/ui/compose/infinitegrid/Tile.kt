@@ -73,6 +73,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -647,6 +648,9 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
  * Disabled and unavailable tiles retain the colors selected by SystemUI.
  */
 
+// The QS host can remain composed after the shade closes. Do not retain blur regions then.
+internal val LocalQsTileBlurVisible = staticCompositionLocalOf { false }
+
 internal fun qsTileUsesBlur(settings: CustomLabelColors, state: Int): Boolean =
     when (state) {
         STATE_ACTIVE -> settings.activeEffect in 3..4
@@ -670,7 +674,7 @@ internal fun qsTileBackgroundModifier(
         STATE_INACTIVE -> settings.inactiveGradientEnd
         else -> null
     }
-    val wantsBlur = start != null && qsTileUsesBlur(settings, state)
+    val wantsBlur = start != null && qsTileUsesBlur(settings, state) && LocalQsTileBlurVisible.current
     val view = LocalView.current
     var blur by remember(view) { mutableStateOf<BackgroundBlurDrawable?>(null) }
     var blurSupported by remember(view) { mutableStateOf(false) }
@@ -686,7 +690,6 @@ internal fun qsTileBackgroundModifier(
                 if (wantsBlur && blur == null) {
                     blur = v.viewRootImpl?.createBackgroundBlurDrawable()?.apply {
                         setBlurRadius(v.resources.getDimensionPixelSize(R.dimen.notification_background_blur_radius))
-                        setXfermode(null)
                         setColor(android.graphics.Color.TRANSPARENT)
                     }
                 }
