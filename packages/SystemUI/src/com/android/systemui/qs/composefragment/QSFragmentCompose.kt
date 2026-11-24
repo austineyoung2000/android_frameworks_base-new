@@ -602,7 +602,9 @@ constructor(
                         ) {
                             CompositionLocalProvider(
                                 LocalQsTileBlurVisible provides
-                                    (viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.showingMirror)
+                                    (viewModel.isQsVisibleAndAnyShadeExpanded &&
+                                        !viewModel.showingMirror &&
+                                        viewModel.panelExpansionFraction >= 0.995f)
                             ) {
                                 CollapsableQuickSettingsSTL(oneUiTileStore)
                             }
