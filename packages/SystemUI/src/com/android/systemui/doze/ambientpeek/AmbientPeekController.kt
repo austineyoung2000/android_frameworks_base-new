@@ -110,6 +110,7 @@ class AmbientPeekController @Inject constructor(
                 maxApps = (value?.toIntOrNull() ?: 6).coerceIn(2, 6)
                 render()
             }, "system:ambient_peek_max_apps")
+            tuner.addTunable({ _, _ -> render() }, "system:ambient_peek_icon_size")
         }
         render()
     }
