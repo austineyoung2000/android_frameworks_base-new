@@ -184,6 +184,39 @@ class AmbientPeekTapView(context: Context) : View(context) {
         }
     }
 
+    // Some apps supply "sender: sender" as a title, or repeat the sender in the body.
+    private fun samePreviewIdentity(first: String, second: String): Boolean {
+        val a = first.trim()
+        val b = second.trim()
+        if (a.isEmpty() || b.isEmpty()) return false
+        if (a.equals(b, ignoreCase = true)) return true
+        val phoneChars = Regex("^[+0-9() .-]+$")
+        if (!phoneChars.matches(a) || !phoneChars.matches(b)) return false
+        val aDigits = a.filter { it.isDigit() }
+        val bDigits = b.filter { it.isDigit() }
+        return aDigits.length >= 7 && aDigits == bDigits
+    }
+
+    private fun cleanPreviewTitle(raw: String): String {
+        val title = raw.trim()
+        val separator = title.indexOf(':')
+        if (separator <= 0) return title
+        val first = title.substring(0, separator).trim()
+        val second = title.substring(separator + 1).trim()
+        return if (samePreviewIdentity(first, second)) first else title
+    }
+
+    private fun cleanPreviewBody(title: String, raw: String): String {
+        val body = raw.trim()
+        if (samePreviewIdentity(title, body)) return ""
+        val separator = body.indexOf(':')
+        if (separator > 0 && samePreviewIdentity(title, body.substring(0, separator))) {
+            val remainder = body.substring(separator + 1).trim()
+            if (remainder.isNotEmpty()) return remainder
+        }
+        return body
+    }
+
     private fun drawPreview(canvas: Canvas, group: AmbientPeekController.Group, top: Float,
         safeBottom: Float) {
         val left = dp(24f)
@@ -195,8 +228,8 @@ class AmbientPeekTapView(context: Context) : View(context) {
 
         val content = group.previews.mapNotNull { preview ->
             val title = if (preview.redacted) context.getString(R.string.ambient_peek_hidden)
-                else preview.title
-            val body = if (preview.redacted) "" else preview.body
+                else cleanPreviewTitle(preview.title)
+            val body = if (preview.redacted) "" else cleanPreviewBody(title, preview.body)
             listOf(title, body).filter { it.isNotBlank() }.joinToString("\n")
                 .takeIf { it.isNotEmpty() }
         }.joinToString("\n\n").let {
