@@ -680,38 +680,57 @@ internal fun qsTileBackgroundModifier(
     var blurSupported by remember(view) { mutableStateOf(false) }
     DisposableEffect(view, wantsBlur) {
         val listeners = CrossWindowBlurListeners.getInstance()
-        fun updateSupport(enabled: Boolean) {
-            blurSupported = enabled
-            blur?.setVisible(enabled && wantsBlur, false)
+        var disposed = false
+        var ownedBlur: BackgroundBlurDrawable? = null
+
+        fun releaseBlur() {
+            val old = ownedBlur ?: return
+            ownedBlur = null
+            // Remove the region from the window aggregator before the composable disappears.
+            old.setVisible(false, false)
+            old.setBlurRadius(0)
+            if (blur === old) blur = null
         }
+
+        fun updateSupport(enabled: Boolean) {
+            if (disposed) return
+            blurSupported = enabled
+            ownedBlur?.setVisible(enabled && wantsBlur && view.isAttachedToWindow, false)
+        }
+
         val callback = Consumer<Boolean> { updateSupport(it) }
         val attachment = object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) {
-                if (wantsBlur && blur == null) {
-                    blur = v.viewRootImpl?.createBackgroundBlurDrawable()?.apply {
-                        setBlurRadius(v.resources.getDimensionPixelSize(R.dimen.notification_background_blur_radius))
-                        setColor(android.graphics.Color.TRANSPARENT)
-                    }
-                }
+                if (disposed || !wantsBlur || ownedBlur != null) return
+                val created = v.viewRootImpl?.createBackgroundBlurDrawable() ?: return
+                // Start hidden: a tile may be detached or the shade closed before its first draw.
+                created.setVisible(false, false)
+                created.setBlurRadius(v.resources.getDimensionPixelSize(
+                    R.dimen.notification_background_blur_radius
+                ))
+                created.setColor(android.graphics.Color.TRANSPARENT)
+                ownedBlur = created
+                blur = created
+                updateSupport(listeners.isCrossWindowBlurEnabled)
             }
+
             override fun onViewDetachedFromWindow(v: View) {
-                blur?.setVisible(false, false)
-                blur = null
+                releaseBlur()
             }
         }
         if (wantsBlur) {
             listeners.addListener(view.context.mainExecutor, callback)
             view.addOnAttachStateChangeListener(attachment)
             if (view.isAttachedToWindow) attachment.onViewAttachedToWindow(view)
-            blurSupported = listeners.isCrossWindowBlurEnabled
+            updateSupport(listeners.isCrossWindowBlurEnabled)
         }
         onDispose {
+            disposed = true
             if (wantsBlur) {
                 listeners.removeListener(callback)
                 view.removeOnAttachStateChangeListener(attachment)
             }
-            blur?.setVisible(false, false)
-            blur = null
+            releaseBlur()
         }
     }
     if (start == null) return Modifier
@@ -722,12 +741,11 @@ internal fun qsTileBackgroundModifier(
         if (activeBlur) {
             drawIntoCanvas { canvas ->
                 val drawable = currentBlur ?: return@drawIntoCanvas
-                if (canvas.nativeCanvas.isHardwareAccelerated) {
+                if (canvas.nativeCanvas.isHardwareAccelerated && drawable.isVisible) {
                     val outline = shape.createOutline(size, layoutDirection, this)
                     if (outline is Outline.Rectangle) {
                         drawable.setCornerRadius(0f)
                         drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
-                        drawable.setVisible(true, false)
                         drawable.draw(canvas.nativeCanvas)
                         drewBlur = true
                     } else if (outline is Outline.Rounded) {
@@ -739,7 +757,6 @@ internal fun qsTileBackgroundModifier(
                             rr.bottomRightCornerRadius.x, rr.bottomRightCornerRadius.y,
                         )
                         drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
-                        drawable.setVisible(true, false)
                         drawable.draw(canvas.nativeCanvas)
                         drewBlur = true
                     }
