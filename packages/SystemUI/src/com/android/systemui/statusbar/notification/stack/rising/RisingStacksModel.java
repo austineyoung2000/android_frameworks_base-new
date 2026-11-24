@@ -47,9 +47,16 @@ public final class RisingStacksModel {
         public final String groupKey;
         public final boolean groupSummary;
         public final int rank;
+        public final long postTime;
 
         public Entry(String notificationKey, AppKey app, String groupKey,
                 boolean groupSummary, int rank) {
+            this(notificationKey, app, groupKey, groupSummary, rank, 0L);
+        }
+
+        public Entry(String notificationKey, AppKey app, String groupKey,
+                boolean groupSummary, int rank, long postTime) {
+            this.postTime = postTime;
             this.notificationKey = Objects.requireNonNull(notificationKey);
             this.app = Objects.requireNonNull(app);
             this.groupKey = groupKey;
@@ -62,11 +69,13 @@ public final class RisingStacksModel {
         public final AppKey app;
         public final int count;
         public final int highestRank;
+        public final long newestPostTime;
 
-        private AppGroup(AppKey app, int count, int highestRank) {
+        private AppGroup(AppKey app, int count, int highestRank, long newestPostTime) {
             this.app = app;
             this.count = count;
             this.highestRank = highestRank;
+            this.newestPostTime = newestPostTime;
         }
     }
 
@@ -108,14 +117,16 @@ public final class RisingStacksModel {
             }
             MutableGroup group = groups.computeIfAbsent(entry.app, ignored -> new MutableGroup());
             group.count++;
+            group.newestPostTime = Math.max(group.newestPostTime, entry.postTime);
             group.highestRank = Math.min(group.highestRank, entry.rank);
         }
         List<AppGroup> apps = new ArrayList<>();
         for (Map.Entry<AppKey, MutableGroup> entry : groups.entrySet()) {
             apps.add(new AppGroup(entry.getKey(), entry.getValue().count,
-                    entry.getValue().highestRank));
+                    entry.getValue().highestRank, entry.getValue().newestPostTime));
         }
-        apps.sort(Comparator.comparingInt((AppGroup group) -> group.highestRank)
+        apps.sort(Comparator.comparingLong((AppGroup group) -> group.newestPostTime).reversed()
+                .thenComparingInt(group -> group.highestRank)
                 .thenComparing(group -> group.app.packageName)
                 .thenComparingInt(group -> group.app.userId));
         return new Snapshot(apps, groups.containsKey(selectedApp) ? selectedApp : null);
@@ -124,6 +135,7 @@ public final class RisingStacksModel {
     private static final class MutableGroup {
         int count;
         int highestRank = Integer.MAX_VALUE;
+        long newestPostTime;
     }
 
     private static final class GroupKey {
