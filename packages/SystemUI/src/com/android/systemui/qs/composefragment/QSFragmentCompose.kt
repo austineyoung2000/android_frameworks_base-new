@@ -246,6 +246,7 @@ import com.android.systemui.qs.panels.shared.model.QSLayoutItem
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.FullScreenTilePicker
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQsTileBlurVisible
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalCollapsedRows
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSCompactMode
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalTileDragHandler
@@ -599,7 +600,12 @@ constructor(
                                 .thenIf(viewModel.showingMirror) { Modifier.gesturesDisabled() }
                                 .graphicsLayer { alpha = pickerHiddenAlpha }
                         ) {
-                            CollapsableQuickSettingsSTL(oneUiTileStore)
+                            CompositionLocalProvider(
+                                LocalQsTileBlurVisible provides
+                                    (viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.showingMirror)
+                            ) {
+                                CollapsableQuickSettingsSTL(oneUiTileStore)
+                            }
                         }
 
                         AnimatedVisibility(
