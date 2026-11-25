@@ -34,6 +34,7 @@ import com.android.systemui.BootCompleteCache;
 import com.android.systemui.BootCompleteCacheImpl;
 import com.android.systemui.CameraProtectionModule;
 import com.android.systemui.CoreStartable;
+import com.android.systemui.rr.pie.PieModule;
 import com.android.systemui.KairosCoreStartableModule;
 import com.android.systemui.SystemUISecondaryUserService;
 import com.android.systemui.activity.ActivityModule;
@@ -216,6 +217,7 @@ import javax.inject.Named;
  * may not appreciate that.
  */
 @Module(includes = {
+        PieModule.class,
         ActivityModule.class,
         AmbientModule.class,
         AppOpsModule.class,
