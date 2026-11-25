@@ -77,6 +77,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
@@ -88,6 +89,8 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -318,6 +321,7 @@ fun ContentScope.Tile(
             modifier =
                 modifier
                     .then(surfaceRevealModifier)
+                    .then(qsTileNeonHaloModifier(labelColors, uiState.visualState, tileShape))
                     .borderOnFocus(color = MaterialTheme.colorScheme.secondary, tileShape.topEnd)
                     .then(
                         if (iconOnly)
@@ -779,6 +783,67 @@ internal fun qsTileBackgroundModifier(
         else drawRect(color = first)
     }
 }
+
+/**
+ * Draw the neon halo behind the clipped tile, following Resurrected Remix's blurred-paint
+ * approach. A gradient shader extends it to the dual-color effect.
+ */
+internal fun neonHaloModifier(
+    effect: Int,
+    first: Color?,
+    second: Color?,
+    intensity: Int,
+    shape: RoundedCornerShape,
+): Modifier {
+    if (effect !in 5..6 || first == null || intensity <= 0) return Modifier
+    val strength = intensity.coerceIn(0, 100) / 100f
+    val end = if (effect == 6) second ?: first else first
+    return Modifier.drawWithCache {
+        val outline = shape.createOutline(size, layoutDirection, this)
+        val path = Path()
+        when (outline) {
+            is Outline.Rounded -> path.addRoundRect(outline.roundRect)
+            is Outline.Rectangle -> path.addRect(outline.rect)
+            is Outline.Generic -> path.addPath(outline.path)
+        }
+        // Mask filters are not supported on hardware canvases. Cache a half-resolution
+        // software-rendered halo and composite it onto SystemUI's hardware canvas.
+        val blurPx = (2f + strength * 14f).dp.toPx()
+        val padding = kotlin.math.ceil(blurPx * 2f).toInt()
+        val bitmapScale = 0.5f
+        val bitmapWidth = kotlin.math.ceil((size.width + padding * 2) * bitmapScale).toInt().coerceAtLeast(1)
+        val bitmapHeight = kotlin.math.ceil((size.height + padding * 2) * bitmapScale).toInt().coerceAtLeast(1)
+        val bitmap = android.graphics.Bitmap.createBitmap(bitmapWidth, bitmapHeight,
+            android.graphics.Bitmap.Config.ARGB_8888)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            maskFilter = android.graphics.BlurMaskFilter(blurPx, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            shader = android.graphics.LinearGradient(0f, 0f, size.width.coerceAtLeast(1f), 0f,
+                first.copy(alpha = 0.65f * strength).toArgb(),
+                end.copy(alpha = 0.65f * strength).toArgb(),
+                android.graphics.Shader.TileMode.CLAMP)
+        }
+        android.graphics.Canvas(bitmap).apply {
+            scale(bitmapScale, bitmapScale)
+            translate(padding.toFloat(), padding.toFloat())
+            drawPath(path.asAndroidPath(), paint)
+        }
+        val destination = android.graphics.RectF(-padding.toFloat(), -padding.toFloat(),
+            size.width + padding, size.height + padding)
+        val bitmapPaint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+        onDrawBehind {
+            drawIntoCanvas { canvas -> canvas.nativeCanvas.drawBitmap(bitmap, null, destination, bitmapPaint) }
+        }
+    }
+}
+
+internal fun qsTileNeonHaloModifier(settings: CustomLabelColors, state: Int, shape: RoundedCornerShape): Modifier =
+    when (state) {
+        STATE_ACTIVE -> neonHaloModifier(settings.activeEffect, settings.activeBackground,
+            settings.activeGradientEnd, settings.activeGlowIntensity, shape)
+        STATE_INACTIVE -> neonHaloModifier(settings.inactiveEffect, settings.inactiveBackground,
+            settings.inactiveGradientEnd, settings.inactiveGlowIntensity, shape)
+        else -> Modifier
+    }
 
 /** Inset layered neon edges remain inside the tile clip and follow its current shape. */
 internal fun neonGlowModifier(

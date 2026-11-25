@@ -22,6 +22,8 @@ import static com.android.systemui.util.ColorUtilKt.hexColorString;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -122,6 +124,13 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private boolean mIsBlurSupported = false;
     private int mCardColorMode;
     private int mCardGlowIntensity;
+    private Bitmap mCardGlowBitmap;
+    private int mCardGlowBitmapWidth;
+    private int mCardGlowBitmapHeight;
+    private int mCardGlowBitmapPadding;
+    private int mCardGlowBitmapRadiiHash;
+    private float mCardGlowBitmapDensity;
+    private final Paint mCardGlowBitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private int mCardColorFirst = Color.MAGENTA;
     private int mCardColorSecond = Color.BLUE;
     private int mCardStyle;
@@ -131,6 +140,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
             updateCardAppearance();
 
     private void updateCardAppearance() {
+        mCardGlowBitmap = null;
         final android.content.ContentResolver resolver = mContext.getContentResolver();
         mCardColorMode = Settings.System.getIntForUser(resolver,
                 "notification_card_color_mode", 0, UserHandle.USER_CURRENT);
@@ -243,6 +253,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
 
     @Override
     protected void onDetachedFromWindow() {
+        mCardGlowBitmap = null;
         Dependency.get(TunerService.class).removeTunable(mCardAppearanceTunable);
         CrossWindowBlurListeners.getInstance().removeListener(mCardBlurListener);
         if (mCardBlurDrawable != null) {
@@ -379,6 +390,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
         paint.setShader(new LinearGradient(rect.left, rect.top, rect.right, rect.top,
                 mCardColorFirst, second, Shader.TileMode.CLAMP));
         float density = getResources().getDisplayMetrics().density;
+        drawCachedCardGlow(canvas, bounds, density, second);
         for (int layer = 5; layer >= 1; layer--) {
             paint.setStrokeWidth(layer * 2 * density);
             int alpha = mDrawableAlpha * mCardGlowIntensity / 100;
@@ -388,6 +400,47 @@ public class NotificationBackgroundView extends View implements Dumpable,
         paint.setShader(null);
         paint.setStyle(Paint.Style.FILL);
         canvas.restore();
+    }
+
+    /** Render the blur on a software bitmap; mask filters are ignored by hardware canvases. */
+    private void drawCachedCardGlow(Canvas canvas, Rect bounds, float density, int second) {
+        final int width = bounds.width();
+        final int height = bounds.height();
+        final int radiiHash = Arrays.hashCode(mCornerRadii);
+        if (mCardGlowBitmap == null || mCardGlowBitmapWidth != width
+                || mCardGlowBitmapHeight != height || mCardGlowBitmapRadiiHash != radiiHash
+                || mCardGlowBitmapDensity != density) {
+            final float blur = (2f + 14f * mCardGlowIntensity / 100f) * density;
+            final int padding = (int) Math.ceil(blur * 2f);
+            final float scale = 0.5f;
+            final int bitmapWidth = Math.max(1, (int) Math.ceil((width + 2 * padding) * scale));
+            final int bitmapHeight = Math.max(1, (int) Math.ceil((height + 2 * padding) * scale));
+            Bitmap bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888);
+            Canvas softwareCanvas = new Canvas(bitmap);
+            softwareCanvas.scale(scale, scale);
+            softwareCanvas.translate(padding, padding);
+            Path localPath = new Path();
+            localPath.addRoundRect(new RectF(0, 0, width, height), mCornerRadii, Path.Direction.CW);
+            Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
+            glow.setStyle(Paint.Style.STROKE);
+            glow.setStrokeWidth(4f * density);
+            glow.setMaskFilter(new BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL));
+            glow.setShader(new LinearGradient(0, 0, Math.max(1, width), 0,
+                    mCardColorFirst, second, Shader.TileMode.CLAMP));
+            glow.setAlpha(mCardGlowIntensity * 65 * 255 / 10000);
+            softwareCanvas.drawPath(localPath, glow);
+            mCardGlowBitmap = bitmap;
+            mCardGlowBitmapWidth = width;
+            mCardGlowBitmapHeight = height;
+            mCardGlowBitmapPadding = padding;
+            mCardGlowBitmapRadiiHash = radiiHash;
+            mCardGlowBitmapDensity = density;
+        }
+        int padding = mCardGlowBitmapPadding;
+        mCardGlowBitmapPaint.setAlpha(mDrawableAlpha);
+        canvas.drawBitmap(mCardGlowBitmap, null,
+                new RectF(bounds.left - padding, bounds.top - padding,
+                        bounds.right + padding, bounds.bottom + padding), mCardGlowBitmapPaint);
     }
 
     private void drawCardStyle(Canvas canvas, Rect bounds) {

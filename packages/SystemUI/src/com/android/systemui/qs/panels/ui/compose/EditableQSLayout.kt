@@ -156,6 +156,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.EditModeTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileUsesBlur
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonHaloModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
@@ -2108,6 +2109,7 @@ fun DraggableTile(
             Surface(
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(qsTileNeonHaloModifier(customTileColors, visualState, RoundedCornerShape(InactiveCornerRadius)))
                     .then(
                         if (showBorder) Modifier.border(
                             width = 2.dp,
@@ -2208,6 +2210,7 @@ fun DraggableTile(
             Surface(
                 modifier        = Modifier
                     .fillMaxSize()
+                    .then(qsTileNeonHaloModifier(customTileColors, visualState, RoundedCornerShape(percent = 50)))
                     .then(borderModifier),
                 shape           = RoundedCornerShape(percent = 50),
                 color           = Color.Transparent,
