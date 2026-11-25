@@ -121,6 +121,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
 
     private boolean mIsBlurSupported = false;
     private int mCardColorMode;
+    private int mCardGlowIntensity;
     private int mCardColorFirst = Color.MAGENTA;
     private int mCardColorSecond = Color.BLUE;
     private int mCardStyle;
@@ -137,6 +138,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 "notification_card_color_first", Color.MAGENTA, UserHandle.USER_CURRENT);
         mCardColorSecond = Settings.System.getIntForUser(resolver,
                 "notification_card_color_second", Color.BLUE, UserHandle.USER_CURRENT);
+        mCardGlowIntensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(resolver,
+                "notification_card_glow_intensity", 60, UserHandle.USER_CURRENT)));
         mCardStyle = Settings.System.getIntForUser(resolver,
                 "notification_card_style", 0, UserHandle.USER_CURRENT);
         updateCardBlur();
@@ -226,7 +229,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
         super.onAttachedToWindow();
         Dependency.get(TunerService.class).addTunable(mCardAppearanceTunable,
                 "system:notification_card_color_mode", "system:notification_card_color_first",
-                "system:notification_card_color_second", "system:notification_card_style");
+                "system:notification_card_color_second", "system:notification_card_style",
+                "system:notification_card_glow_intensity");
         CrossWindowBlurListeners.getInstance().addListener(
                 getContext().getMainExecutor(), mCardBlurListener);
         updateCardBlur();
@@ -295,7 +299,10 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 } else {
                     draw(canvas, mBackground);
                 }
-                if (mBackground != null) drawCardStyle(canvas, mBackgroundBounds);
+                if (mBackground != null) {
+                    drawCardStyle(canvas, mBackgroundBounds);
+                    drawCardGlow(canvas, mBackgroundBounds);
+                }
                 canvas.restore();
                 return;
             }
@@ -321,7 +328,10 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 }
             }
 
-            if (backgroundBounds != null) drawCardStyle(canvas, backgroundBounds);
+            if (backgroundBounds != null) {
+                drawCardStyle(canvas, backgroundBounds);
+                drawCardGlow(canvas, backgroundBounds);
+            }
             canvas.restore();
         }
     }
@@ -351,6 +361,33 @@ public class NotificationBackgroundView extends View implements Dumpable,
         path.lineTo(left, top);
 
         return path;
+    }
+
+    private void drawCardGlow(Canvas canvas, Rect bounds) {
+        if ((mCardColorMode != 5 && mCardColorMode != 6) || mCardGlowIntensity <= 0
+                || bounds == null || bounds.isEmpty()) return;
+        RectF rect = new RectF(bounds);
+        Path path = new Path();
+        path.addRoundRect(rect, mCornerRadii, Path.Direction.CW);
+        canvas.save();
+        canvas.clipPath(path);
+        Paint paint = mCardStylePaint;
+        paint.reset();
+        paint.setAntiAlias(true);
+        paint.setStyle(Paint.Style.STROKE);
+        int second = mCardColorMode == 6 ? mCardColorSecond : mCardColorFirst;
+        paint.setShader(new LinearGradient(rect.left, rect.top, rect.right, rect.top,
+                mCardColorFirst, second, Shader.TileMode.CLAMP));
+        float density = getResources().getDisplayMetrics().density;
+        for (int layer = 5; layer >= 1; layer--) {
+            paint.setStrokeWidth(layer * 2 * density);
+            int alpha = mDrawableAlpha * mCardGlowIntensity / 100;
+            paint.setAlpha(layer == 1 ? alpha * 9 / 10 : alpha / 10);
+            canvas.drawPath(path, paint);
+        }
+        paint.setShader(null);
+        paint.setStyle(Paint.Style.FILL);
+        canvas.restore();
     }
 
     private void drawCardStyle(Canvas canvas, Rect bounds) {
@@ -685,7 +722,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
             gradient.setTintList(null);
             gradient.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
             int first = mCardColorFirst;
-            int second = (mCardColorMode == 2 || mCardColorMode == 4)
+            int second = (mCardColorMode == 2 || mCardColorMode == 4 || mCardColorMode == 6)
                     ? mCardColorSecond : mCardColorFirst;
             if (customCardBlurAvailable()) {
                 first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), 160) << 24);

@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -85,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.core.graphics.drawable.toBitmap
 import com.android.systemui.globalactions.GlobalActionsDialogLite
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonGlowModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
 import android.service.quicksettings.Tile.STATE_ACTIVE
 import com.android.systemui.statusbar.BlurUtils
@@ -300,6 +302,7 @@ private data class PowerTileAppearance(
     val first: Color,
     val second: Color,
     val useBlur: Boolean,
+    val glowIntensity: Int,
 )
 
 @Composable
@@ -311,27 +314,33 @@ private fun rememberPowerTileAppearance(): PowerTileAppearance {
         val style = Settings.System.getIntForUser(resolver, "power_menu_tile_style", 0,
             UserHandle.USER_CURRENT).coerceIn(0, 7)
         val effect = Settings.System.getIntForUser(resolver, "power_menu_tile_color_effect", 0,
-            UserHandle.USER_CURRENT).coerceIn(0, 4)
+            UserHandle.USER_CURRENT).coerceIn(0, 6)
         val first = Color(Settings.System.getIntForUser(resolver, "power_menu_tile_color_first",
             0xff6200ee.toInt(), UserHandle.USER_CURRENT))
         val second = Color(Settings.System.getIntForUser(resolver, "power_menu_tile_color_second",
             0xff0000ff.toInt(), UserHandle.USER_CURRENT))
-        PowerTileAppearance(style, effect, first, second, effect in 3..4 && backdrop)
+        val glow = Settings.System.getIntForUser(resolver, "power_menu_glow_intensity", 60,
+            UserHandle.USER_CURRENT).coerceIn(0, 100)
+        PowerTileAppearance(style, effect, first, second, effect in 3..4 && backdrop, glow)
     }
 }
 
 private fun PowerTileAppearance.backgroundModifier(shape: RoundedCornerShape): Modifier {
     if (effect == 0) return Modifier.then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
-    val firstColor = if (useBlur) first.copy(alpha = minOf(first.alpha, 0.63f)) else first
-    val last = if (effect == 2 || effect == 4) second else first
-    val lastColor = if (useBlur) last.copy(alpha = minOf(last.alpha, 0.63f)) else last
-    return Modifier.background(Brush.horizontalGradient(listOf(firstColor, lastColor)), shape)
+    val firstColor = if (effect in 5..6) lerp(first, Color.Black, 0.78f).copy(alpha = 1f)
+        else if (useBlur) first.copy(alpha = minOf(first.alpha, 0.63f)) else first
+    val last = if (effect == 2 || effect == 4 || effect == 6) second else first
+    val lastColor = if (effect in 5..6) lerp(last, Color.Black, 0.78f).copy(alpha = 1f)
+        else if (useBlur) last.copy(alpha = minOf(last.alpha, 0.63f)) else last
+    return neonGlowModifier(effect, first, second, glowIntensity, shape)
+        .background(Brush.horizontalGradient(listOf(firstColor, lastColor)), shape)
         .then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
 }
 
 private fun PowerTileAppearance.contentColor(native: Color): Color {
     if (effect == 0) return native
-    val last = if (effect == 2 || effect == 4) second else first
+    if (effect in 5..6) return Color.White
+    val last = if (effect == 2 || effect == 4 || effect == 6) second else first
     val brightness = (android.graphics.Color.luminance(first.toArgb()) +
         android.graphics.Color.luminance(last.toArgb())) / 2f
     return if (brightness > 0.5f) Color.Black else Color.White

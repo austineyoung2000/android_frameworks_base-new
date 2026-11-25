@@ -156,6 +156,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.EditModeTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileUsesBlur
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
@@ -2121,6 +2122,7 @@ fun DraggableTile(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .then(qsTileNeonModifier(customTileColors, visualState, RoundedCornerShape(InactiveCornerRadius)))
                         .then(qsTileBackgroundModifier(customTileColors, visualState, RoundedCornerShape(InactiveCornerRadius)))
                         .then(qsTileStyleModifier(
                             customTileColors.tileStyle, visualState, RoundedCornerShape(InactiveCornerRadius)
@@ -2224,6 +2226,7 @@ fun DraggableTile(
                     } else {
                         BoxWithConstraints(
                             modifier = Modifier.fillMaxSize()
+                                .then(qsTileNeonModifier(customTileColors, visualState, RoundedCornerShape(percent = 50)))
                                 .then(qsTileBackgroundModifier(customTileColors, visualState, RoundedCornerShape(percent = 50))),
                             contentAlignment = Alignment.Center
                         ) {

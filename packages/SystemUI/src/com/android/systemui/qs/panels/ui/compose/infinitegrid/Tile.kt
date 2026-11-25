@@ -85,6 +85,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -388,7 +389,8 @@ fun ContentScope.Tile(
                 isDualTarget = uiState.handlesToggleClick,
                 modifier = contentRevealModifier
                     .then(qsTileBackgroundModifier(labelColors, uiState.visualState, tileShape))
-                    .then(qsTileStyleModifier(labelColors.tileStyle, uiState.visualState, tileShape)),
+                    .then(qsTileStyleModifier(labelColors.tileStyle, uiState.visualState, tileShape))
+                    .then(qsTileNeonModifier(labelColors, uiState.visualState, tileShape)),
             ) {
                 val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
                 if (iconOnly) {
@@ -554,6 +556,8 @@ internal data class CustomLabelColors(
     val inactiveGradientEnd: Color?,
     val activeEffect: Int,
     val inactiveEffect: Int,
+    val activeGlowIntensity: Int,
+    val inactiveGlowIntensity: Int,
 )
 
 @Composable
@@ -572,7 +576,7 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
         fun rawColor(key: String, fallback: Int) = Color(Settings.System.getIntForUser(resolver, key, fallback, UserHandle.USER_CURRENT))
         fun effect(kind: String): Int {
             val configured = Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_effect", -1, UserHandle.USER_CURRENT)
-            if (configured in 0..4) return configured
+            if (configured in 0..6) return configured
             if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_color_enabled", 0, UserHandle.USER_CURRENT) == 0) return 0
             return if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_gradient_enabled", 0, UserHandle.USER_CURRENT) != 0) 2 else 1
         }
@@ -596,11 +600,13 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
                 resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT
             ),
             activeBackground = if (effect("active") == 0) null else rawColor("qs_active_background_color", 0xff6200ee.toInt()),
-            activeGradientEnd = if (effect("active") in listOf(2, 4)) rawColor("qs_active_gradient_end_color", 0xff0000ff.toInt()) else null,
+            activeGradientEnd = if (effect("active") in listOf(2, 4, 6)) rawColor("qs_active_gradient_end_color", 0xff0000ff.toInt()) else null,
             inactiveBackground = if (effect("inactive") == 0) null else rawColor("qs_inactive_background_color", 0xff55555f.toInt()),
-            inactiveGradientEnd = if (effect("inactive") in listOf(2, 4)) rawColor("qs_inactive_gradient_end_color", 0xff0000ff.toInt()) else null,
+            inactiveGradientEnd = if (effect("inactive") in listOf(2, 4, 6)) rawColor("qs_inactive_gradient_end_color", 0xff0000ff.toInt()) else null,
             activeEffect = effect("active"),
             inactiveEffect = effect("inactive"),
+            activeGlowIntensity = Settings.System.getIntForUser(resolver, "qs_active_glow_intensity", 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
+            inactiveGlowIntensity = Settings.System.getIntForUser(resolver, "qs_inactive_glow_intensity", 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
         )
     }
     val colors = remember(context) { mutableStateOf(readColors()) }
@@ -619,6 +625,7 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_inactive_icon_color_enabled", "qs_inactive_icon_color",
             "qs_tile_shape", "qs_compose_tile_style",
             "qs_active_background_effect", "qs_inactive_background_effect",
+            "qs_active_glow_intensity", "qs_inactive_glow_intensity",
             "qs_active_background_color_enabled", "qs_active_background_color",
             "qs_active_gradient_enabled", "qs_active_gradient_end_color",
             "qs_inactive_background_color_enabled", "qs_inactive_background_color",
@@ -763,12 +770,53 @@ internal fun qsTileBackgroundModifier(
                 }
             }
         }
-        val first = if (drewBlur) start.copy(alpha = minOf(start.alpha, 0.63f)) else start
-        val last = if (drewBlur) end?.copy(alpha = minOf(end.alpha, 0.63f)) else end
+        val effect = if (state == STATE_ACTIVE) settings.activeEffect else settings.inactiveEffect
+        val first = if (effect in 5..6) start.copy(alpha = minOf(start.alpha, 0.22f))
+            else if (drewBlur) start.copy(alpha = minOf(start.alpha, 0.63f)) else start
+        val last = if (effect in 5..6) end?.copy(alpha = minOf(end.alpha, 0.22f))
+            else if (drewBlur) end?.copy(alpha = minOf(end.alpha, 0.63f)) else end
         if (last != null) drawRect(brush = Brush.horizontalGradient(listOf(first, last)))
         else drawRect(color = first)
     }
 }
+
+/** Inset layered neon edges remain inside the tile clip and follow its current shape. */
+internal fun neonGlowModifier(
+    effect: Int,
+    first: Color?,
+    second: Color?,
+    intensity: Int,
+    shape: RoundedCornerShape,
+): Modifier {
+    if (effect !in 5..6 || first == null || intensity <= 0) return Modifier
+    val strength = intensity.coerceIn(0, 100) / 100f
+    val end = if (effect == 6) second ?: first else first
+    return Modifier.drawWithContent {
+        drawContent()
+        val outline = shape.createOutline(size, layoutDirection, this)
+        val path = Path()
+        when (outline) {
+            is Outline.Rounded -> path.addRoundRect(outline.roundRect)
+            is Outline.Rectangle -> path.addRect(outline.rect)
+            is Outline.Generic -> path.addPath(outline.path)
+        }
+        for (layer in 5 downTo 1) {
+            val width = (layer * 2f).dp.toPx()
+            val alpha = strength * if (layer == 1) 0.9f else 0.10f
+            val brush = Brush.horizontalGradient(listOf(first.copy(alpha = alpha), end.copy(alpha = alpha)))
+            drawPath(path = path, brush = brush, style = Stroke(width))
+        }
+    }
+}
+
+internal fun qsTileNeonModifier(settings: CustomLabelColors, state: Int, shape: RoundedCornerShape): Modifier =
+    when (state) {
+        STATE_ACTIVE -> neonGlowModifier(settings.activeEffect, settings.activeBackground,
+            settings.activeGradientEnd, settings.activeGlowIntensity, shape)
+        STATE_INACTIVE -> neonGlowModifier(settings.inactiveEffect, settings.inactiveBackground,
+            settings.inactiveGradientEnd, settings.inactiveGlowIntensity, shape)
+        else -> Modifier
+    }
 
 internal fun qsTileStyleModifier(
     style: Int,
