@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.core.graphics.drawable.toBitmap
 import com.android.systemui.globalactions.GlobalActionsDialogLite
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonHaloModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonGlowModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
 import android.service.quicksettings.Tile.STATE_ACTIVE
@@ -324,6 +325,9 @@ private fun rememberPowerTileAppearance(): PowerTileAppearance {
         PowerTileAppearance(style, effect, first, second, effect in 3..4 && backdrop, glow)
     }
 }
+
+private fun PowerTileAppearance.haloModifier(shape: RoundedCornerShape): Modifier =
+    neonHaloModifier(effect, first, second, glowIntensity, shape)
 
 private fun PowerTileAppearance.backgroundModifier(shape: RoundedCornerShape): Modifier {
     if (effect == 0) return Modifier.then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
@@ -773,7 +777,7 @@ private fun RestartOptionTile(
         onClick = onClick,
         shape = tileShape,
         color = if (appearance.effect == 0) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
-        modifier = modifier.height(100.dp)
+        modifier = modifier.height(100.dp).then(appearance.haloModifier(tileShape))
     ) {
         Column(
             modifier = Modifier.fillMaxSize().then(appearance.backgroundModifier(tileShape)).padding(12.dp),
@@ -1292,7 +1296,8 @@ private fun TileItem(
         Surface(
             onClick = onClick,
             enabled = !isEditMode,
-            modifier = Modifier.fillMaxSize().pointerInput(Unit) { },
+            modifier = Modifier.fillMaxSize().then(appearance.haloModifier(tileShape))
+                .pointerInput(Unit) { },
             shape = tileShape,
             color = backgroundColor,
             border = if(isEditMode) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha=0.5f)) else null
