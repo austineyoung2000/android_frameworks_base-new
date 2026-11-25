@@ -212,5 +212,8 @@ interface ISystemUiProxy {
      */
     oneway void onSleepEvent(in MotionEvent event) = 63;
 
-    // Next id = 64
+    /** Ask SystemUI to show the selected custom Recents implementation. */
+    oneway void showCustomRecents() = 64;
+
+    // Next id = 65
 }

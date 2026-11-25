@@ -518,6 +518,12 @@ public class LauncherProxyService implements CallbackController<LauncherProxyLis
         }
 
         @Override
+        public void showCustomRecents() {
+            verifyCallerAndClearCallingIdentityPostMain("showCustomRecents", () ->
+                    mCommandQueue.showRecentApps(false /* triggeredFromAltTab */));
+        }
+
+        @Override
         public void onSleepEvent(MotionEvent event) {
             verifyCallerAndClearCallingIdentity("onSleepEvent", () -> {
                 mHandler.post(() -> {
