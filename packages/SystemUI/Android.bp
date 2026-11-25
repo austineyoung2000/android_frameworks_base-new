@@ -489,6 +489,7 @@ android_library {
     }),
     defaults: ["SystemUI-srcs-defaults"],
     static_libs: [
+        "SlimRecents",
         "//frameworks/libs/systemui:compilelib",
         "com.android.systemui.bundle.phone_api",
         "ax_platform_hooks",
