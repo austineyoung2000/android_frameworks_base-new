@@ -152,8 +152,19 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 "notification_card_glow_intensity", 60, UserHandle.USER_CURRENT)));
         mCardStyle = Settings.System.getIntForUser(resolver,
                 "notification_card_style", 0, UserHandle.USER_CURRENT);
+        if (getParent() instanceof ActivatableNotificationView) {
+            ((ActivatableNotificationView) getParent()).onBackgroundGlowChanged();
+        }
         updateCardBlur();
         invalidate();
+    }
+
+    int getGlowPadding() {
+        if ((mCardColorMode != 5 && mCardColorMode != 6) || mCardGlowIntensity <= 0) {
+            return 0;
+        }
+        return (int) Math.ceil((2f + 14f * mCardGlowIntensity / 100f)
+                * getResources().getDisplayMetrics().density * 3f);
     }
 
     private boolean usesCustomCardBlur() {
@@ -304,8 +315,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 // the stack's clipping when cards overlap or scroll out of view.
                 boolean neon = (mCardColorMode == 5 || mCardColorMode == 6)
                         && mCardGlowIntensity > 0;
-                int glowPadding = neon ? (int) Math.ceil(32f
-                        * getResources().getDisplayMetrics().density) : 0;
+                int glowPadding = neon ? getGlowPadding() : 0;
                 canvas.clipRect(-glowPadding, clipTop > 0 ? clipTop : -glowPadding,
                         getWidth() + glowPadding, clipBottomAmount > 0
                                 ? getActualHeight() - clipBottomAmount
@@ -425,7 +435,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 || mCardGlowBitmapHeight != height || mCardGlowBitmapRadiiHash != radiiHash
                 || mCardGlowBitmapDensity != density) {
             final float blur = (2f + 14f * mCardGlowIntensity / 100f) * density;
-            final int padding = (int) Math.ceil(blur * 2f);
+            final int padding = (int) Math.ceil(blur * 3f);
             final float scale = 0.5f;
             final int bitmapWidth = Math.max(1, (int) Math.ceil((width + 2 * padding) * scale));
             final int bitmapHeight = Math.max(1, (int) Math.ceil((height + 2 * padding) * scale));

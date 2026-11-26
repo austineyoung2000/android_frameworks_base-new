@@ -626,11 +626,20 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable, Ro
             int clipBottomAmount = Math.max(mClipBottomAmount, mBottomOverlap);
             int bottom = Math.max(Math.max(getActualHeight() - clipBottomAmount, top),
                     mMinimumHeightForClipping);
+            // Preserve stack clipping at overlapping edges, but allow a notification's
+            // soft halo to extend beyond otherwise unobstructed edges.
+            int halo = getUnclippedHaloPadding();
+            if (top == 0) top -= halo;
+            if (clipBottomAmount == 0) bottom += halo;
             mClipRect.set(Integer.MIN_VALUE, top, Integer.MAX_VALUE, bottom);
             setClipBounds(mClipRect);
         } else {
             setClipBounds(null);
         }
+    }
+
+    protected int getUnclippedHaloPadding() {
+        return 0;
     }
 
     public void setMinimumHeightForClipping(int minimumHeightForClipping) {
