@@ -186,8 +186,11 @@ fun ContentScope.ConstrainedNotificationStack(
     DisposableEffect(rootView, stacksActive) {
         val observer = rootView.viewTreeObserver
         val listener = ViewTreeObserver.OnPreDrawListener {
-            val widget = rootView.findViewById<View>(R.id.keyguard_info_widgets)
-            val height = if (stacksActive && widget != null && widget.isShown) widget.height else 0
+            val widgets = listOf(R.id.keyguard_info_widgets, R.id.keyguard_widgets,
+                R.id.keyguard_app_widgets).mapNotNull { rootView.findViewById<View>(it) }
+                .filter { it.isShown && it.alpha > 0f && it.height > 0 }
+            val height = if (stacksActive) widgets.sumOf { it.height } +
+                (widgets.size - 1).coerceAtLeast(0) * widgetGapPx else 0
             if (widgetHeightPx != height) widgetHeightPx = height
             true
         }

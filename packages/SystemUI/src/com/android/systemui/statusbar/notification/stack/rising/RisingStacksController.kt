@@ -41,6 +41,8 @@ class RisingStacksController @Inject constructor(
 
     private val mutableState = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = mutableState
+    private val enabledState = MutableStateFlow(false)
+    val isEnabled: StateFlow<Boolean> = enabledState
     private var enabled = false
     private var selected: RisingStacksModel.AppKey? = null
     private var allSelectedByUser = false
@@ -90,6 +92,7 @@ class RisingStacksController @Inject constructor(
         })
         tunerService.addTunable({ _, value ->
             enabled = TunerService.parseIntegerSwitch(value, false)
+            enabledState.value = enabled
             // Tuner replays settings on user changes. Never retain another user's icons or selection.
             selected = null
             allSelectedByUser = false

@@ -26,10 +26,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
 import com.android.compose.animation.scene.ElementContentScope
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardMediaViewModel
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.media.ui.compose.MiniPlayerCompact
+import com.android.systemui.media.ui.viewmodel.MiniPlayerViewModel
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
 import com.android.systemui.media.remedia.ui.compose.Media
 import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.plugins.keyguard.ui.composable.elements.BaseLockscreenElement.ElementSource
@@ -49,6 +54,8 @@ class MediaElementProvider
 constructor(
     @ShadeDisplayAware private val context: Context,
     private val mediaViewModelFactory: KeyguardMediaViewModel.Factory,
+    private val miniPlayerViewModelFactory: MiniPlayerViewModel.Factory,
+    private val risingStacksController: RisingStacksController,
 ) : LockscreenElementProvider {
     override val elements: List<LockscreenElement> by lazy { listOf(MediaCarouselElement()) }
 
@@ -78,7 +85,14 @@ constructor(
                 enter = expandVertically(expandFrom = Alignment.Top),
                 exit = fadeOut(),
             ) {
-                Media(
+                val stacksEnabled by risingStacksController.isEnabled.collectAsStateWithLifecycle()
+                if (stacksEnabled) {
+                    val miniPlayer = rememberViewModel("MiniPlayerStacks") {
+                        miniPlayerViewModelFactory.create()
+                    }
+                    MiniPlayerCompact(viewModel = miniPlayer, compact = true,
+                        notificationAppearance = true, modifier = Modifier.fillMaxWidth())
+                } else Media(
                     viewModelFactory = viewModel.mediaViewModelFactory,
                     presentationStyle = MediaPresentationStyle.Default,
                     behavior = viewModel.mediaUiBehavior,
