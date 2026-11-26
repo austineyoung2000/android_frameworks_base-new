@@ -38,6 +38,21 @@ class AmbientPeekTapView(context: Context) : View(context) {
     private var ready = false
     private var readyListener: ((Boolean) -> Unit)? = null
     private val screenLocation = IntArray(2)
+    private val widgetLayoutListener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+        if (visibility == VISIBLE) invalidate()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        rootView.viewTreeObserver.addOnGlobalLayoutListener(widgetLayoutListener)
+    }
+
+    override fun onDetachedFromWindow() {
+        if (rootView.viewTreeObserver.isAlive) {
+            rootView.viewTreeObserver.removeOnGlobalLayoutListener(widgetLayoutListener)
+        }
+        super.onDetachedFromWindow()
+    }
     private fun dp(v: Float) = v * resources.displayMetrics.density
 
     fun setClockAnchor(anchor: View) { clockAnchor = anchor }
@@ -106,11 +121,24 @@ class AmbientPeekTapView(context: Context) : View(context) {
         val safeBottom = fingerprint?.takeIf { fingerprintRadius > 0f }?.let {
             it.y - screenLocation[1] - fingerprintRadius - dp(32f)
         } ?: height * 0.68f
-        val anchorBottom = clockAnchor?.takeIf { it.isLaidOut }?.let {
+        val clockBottom = clockAnchor?.takeIf { it.isLaidOut }?.let {
             val loc = IntArray(2)
             it.getLocationOnScreen(loc)
             (loc[1] - screenLocation[1] + it.height).toFloat()
         } ?: 0f
+        // These views are laid out separately from this full-screen AOD overlay. Use their
+        // visible bounds so the Peek row stays below widgets as they appear or resize.
+        val anchorBottom = listOf(
+            R.id.keyguard_info_widgets, R.id.keyguard_widgets, R.id.keyguard_app_widgets
+        ).mapNotNull { id ->
+            rootView.findViewById<View>(id)?.takeIf {
+                it.isShown && it.alpha > 0f && it.isLaidOut && it.height > 0
+            }?.let {
+                val loc = IntArray(2)
+                it.getLocationOnScreen(loc)
+                (loc[1] - screenLocation[1] + it.height * it.scaleY).toFloat()
+            }
+        }.fold(clockBottom) { bottom, widgetBottom -> max(bottom, widgetBottom) }
         val minute = android.os.SystemClock.elapsedRealtime() / 60000L
         val jitter = ((minute % 3).toInt() - 1) * dp(2f)
         val maxApps = Settings.System.getIntForUser(
