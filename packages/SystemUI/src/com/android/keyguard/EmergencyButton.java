@@ -42,25 +42,32 @@ import com.android.systemui.bouncer.shared.constants.KeyguardBouncerConstants;
 public class EmergencyButton extends Button {
 
     private final PinViewDecoration mPinDecoration = new PinViewDecoration(this, this::updatePinDecoration);
+    private final CredentialEmergencyDecoration mCredentialDecoration =
+            new CredentialEmergencyDecoration(this, this::updatePinDecoration);
     private ColorStateList mPinOriginalTint;
 
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         mPinOriginalTint = getBackgroundTintList();
         mPinDecoration.attach();
+        mCredentialDecoration.attach();
     }
     @Override protected void onDetachedFromWindow() {
-        if (mPinDecoration.isDevicePin()) setBackgroundTintList(mPinOriginalTint);
+        if (mPinDecoration.isDevicePin() || mCredentialDecoration.supported()) {
+            setBackgroundTintList(mPinOriginalTint);
+        }
         mPinDecoration.detach();
+        mCredentialDecoration.detach();
         super.onDetachedFromWindow();
     }
     private void updatePinDecoration() {
-        setBackgroundTintList(mPinDecoration.customColor()
+        setBackgroundTintList(mPinDecoration.customColor() || mCredentialDecoration.customColor()
                 ? ColorStateList.valueOf(android.graphics.Color.TRANSPARENT) : mPinOriginalTint);
         invalidate();
     }
     @Override protected void onDraw(Canvas canvas) {
         mPinDecoration.draw(canvas, getWidth(), getHeight());
+        mCredentialDecoration.draw(canvas, getWidth(), getHeight());
         super.onDraw(canvas);
     }
 

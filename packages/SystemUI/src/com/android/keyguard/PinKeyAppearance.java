@@ -38,6 +38,23 @@ final class PinKeyAppearance {
         style = Math.max(0, Math.min(7, Settings.System.getIntForUser(r, KEYS[6], 0, UserHandle.USER_CURRENT)));
         halo = null;
     }
+
+    /** Read the active credential's appearance for its emergency button. */
+    void readEmergency(Context context, String prefix, boolean hasStyle) {
+        var r = context.getContentResolver();
+        effect = Math.max(0, Math.min(4, Settings.System.getIntForUser(r,
+                prefix + "_effect", 0, UserHandle.USER_CURRENT)));
+        shape = 0;
+        first = Settings.System.getIntForUser(r, prefix + "_first_color",
+                0xff6200ee, UserHandle.USER_CURRENT);
+        second = Settings.System.getIntForUser(r, prefix + "_second_color",
+                0xff0000ff, UserHandle.USER_CURRENT);
+        intensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(r,
+                prefix + "_glow_intensity", 60, UserHandle.USER_CURRENT)));
+        style = hasStyle ? Math.max(0, Math.min(7, Settings.System.getIntForUser(r,
+                prefix + "_style", 0, UserHandle.USER_CURRENT))) : 0;
+        halo = null;
+    }
     boolean enabled() { return effect != 0 || style != 0; }
     boolean customColor() { return effect != 0; }
     int digitColor() { return digit; }
