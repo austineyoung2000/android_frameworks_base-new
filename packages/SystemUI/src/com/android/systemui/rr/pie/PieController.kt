@@ -5,6 +5,7 @@
 package com.android.systemui.rr.pie
 
 import android.app.StatusBarManager
+import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -213,16 +214,19 @@ constructor(
         if (!tracking || !enabled || keyguardStateController.isShowing) return
         val slices = items.split(',').map { it.trim() }.filter { it in ACTIONS }
         if (slices.isEmpty()) return
-        val userContext = context.createContextAsUser(UserHandle.CURRENT, 0)
-        val appIcons = (if (appsEnabled) apps else emptyList()).mapNotNull { pkg ->
-            try {
-                if (userContext.packageManager.getLaunchIntentForPackage(pkg) == null) null
-                else (iconPack.icon(appIconPack, userContext, pkg)
-                    ?: userContext.packageManager.getApplicationIcon(pkg)).let { pkg to it }
-            } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-                null
+        val userContext = currentUserContext()
+        // Keep each configured shortcut in the ring even if its icon cannot be loaded.
+        // PackageManager lookups must use a concrete user, not USER_CURRENT (-2).
+        val appIcons = (if (appsEnabled) apps else emptyList()).associateWith { pkg ->
+            runCatching {
+                if (userContext == null) context.packageManager.defaultActivityIcon else
+                    iconPack.icon(appIconPack, userContext, pkg)
+                        ?: userContext.packageManager.getApplicationIcon(pkg)
+            }.getOrElse { error ->
+                Log.w(TAG, "Unable to load Pie shortcut icon for $pkg", error)
+                context.packageManager.defaultActivityIcon
             }
-        }.toMap()
+        }
         val pie = PieView(windowContext, slices, appIcons, downX, downY, style, showClock, size / 100f)
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -266,8 +270,10 @@ constructor(
     private fun run(slice: String) {
         if (slice.startsWith(APP_PREFIX)) {
             val pkg = slice.removePrefix(APP_PREFIX)
-            val userContext = context.createContextAsUser(UserHandle.CURRENT, 0)
-            val intent = userContext.packageManager.getLaunchIntentForPackage(pkg) ?: return
+            val userContext = currentUserContext() ?: return
+            val intent = runCatching {
+                userContext.packageManager.getLaunchIntentForPackage(pkg)
+            }.getOrNull() ?: return
             activityStarter.postStartActivityDismissingKeyguard(
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), 0
             )
@@ -292,6 +298,13 @@ constructor(
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), 0
             )
         }
+    }
+
+    private fun currentUserContext(): Context? = runCatching {
+        context.createContextAsUser(UserHandle.of(ActivityManager.getCurrentUser()), 0)
+    }.getOrElse { error ->
+        Log.w(TAG, "Unable to create current-user Pie context", error)
+        null
     }
 
     private fun key(code: Int) {
@@ -355,10 +368,27 @@ constructor(
         init {
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
             for (slice in slices) {
-                context.getDrawable(ICONS.getValue(slice))?.mutate()?.let { icons[slice] = it }
+                val icon = runCatching { context.getDrawable(ICONS.getValue(slice))?.mutate() }
+                    .getOrNull()
+                val fallback = NAV_FALLBACK_ICONS[slice]
+                val resolved = if (fallback != null && (icon == null || !hasVisiblePixels(icon))) {
+                    context.getDrawable(fallback)?.mutate()
+                } else icon
+                resolved?.let { icons[slice] = it }
             }
             appIcons.forEach { (pkg, icon) -> icons[APP_PREFIX + pkg] = icon.mutate() }
         }
+
+        /** A theme can resolve a navigation vector with zero alpha; tint cannot make it visible. */
+        private fun hasVisiblePixels(icon: Drawable): Boolean = runCatching {
+            val bitmap = Bitmap.createBitmap(24, 24, Bitmap.Config.ARGB_8888)
+            icon.setTint(Color.WHITE)
+            icon.setBounds(0, 0, bitmap.width, bitmap.height)
+            icon.draw(Canvas(bitmap))
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            pixels.any { Color.alpha(it) != 0 }
+        }.getOrDefault(false)
 
         fun selectedSlice() = selected
 
@@ -544,6 +574,13 @@ constructor(
             FLASHLIGHT to R.drawable.qs_flashlight_icon_on, SCREENSHOT to R.drawable.ic_screen_capture_camera_outline,
             POWER to R.drawable.ic_qs_footer_power, ASSISTANT to R.drawable.ic_assistant,
             CAMERA to R.drawable.ic_camera,
+        )
+        // Keep themed SystemUI navigation icons where they render; these bundled icons
+        // provide a visible fallback for themes that resolve a transparent vector.
+        private val NAV_FALLBACK_ICONS = mapOf(
+            BACK to R.drawable.rr_pie_back,
+            HOME to R.drawable.rr_pie_home,
+            RECENTS to R.drawable.rr_pie_recents,
         )
         private val ACTIONS = ICONS.keys
     }
