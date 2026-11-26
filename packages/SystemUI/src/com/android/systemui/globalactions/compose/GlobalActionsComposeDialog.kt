@@ -999,6 +999,12 @@ private fun PowerMenuContainer(
 
 @Composable
 private fun MenuHeader(isEditMode: Boolean, onToggleEdit: () -> Unit) {
+    val appearance = rememberPowerTileAppearance()
+    val editShape = RoundedCornerShape(50)
+    val nativeBackground = if (isEditMode) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.surfaceVariant
+    val nativeContent = if (isEditMode) MaterialTheme.colorScheme.onPrimary
+        else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1013,9 +1019,15 @@ private fun MenuHeader(isEditMode: Boolean, onToggleEdit: () -> Unit) {
         
         IconButton(
             onClick = onToggleEdit,
+            modifier = Modifier.then(if (appearance.effect in 5..6) Modifier.padding(8.dp)
+                    else Modifier)
+                .then(appearance.haloModifier(editShape))
+                .then(if (appearance.effect == 0) Modifier.background(nativeBackground, editShape)
+                    else Modifier)
+                .then(appearance.backgroundModifier(editShape)),
             colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = if(isEditMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = if(isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                containerColor = Color.Transparent,
+                contentColor = appearance.contentColor(nativeContent)
             )
         ) {
             Icon(

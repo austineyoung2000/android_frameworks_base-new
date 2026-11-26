@@ -15,6 +15,8 @@ import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Shader
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
@@ -91,6 +93,10 @@ constructor(
     private var appIconPack: String? = null
     private val iconPack = RisingStacksIconPack(context)
     private var style = STYLE_CLASSIC
+    private var surfaceStyle = 0
+    private var firstColor = 0xff6200ee.toInt()
+    private var secondColor = 0xff0000ff.toInt()
+    private var glowIntensity = 60
     private var holdDuration = 250L
     private var edgeWidth = 16f
     private var movementTolerance = 100
@@ -134,7 +140,11 @@ constructor(
         enabled = int(KEY_ENABLED, 0) == 1
         edges = int(KEY_EDGES, EDGES_BOTH)
         zone = int(KEY_ZONE, ZONE_LOWER)
-        style = int(KEY_STYLE, STYLE_CLASSIC).coerceIn(STYLE_NEON, STYLE_CLASSIC)
+        style = int(KEY_STYLE, STYLE_CLASSIC).coerceIn(STYLE_NEON, STYLE_DUAL_COLOR)
+        surfaceStyle = int(KEY_SURFACE_STYLE, 0).coerceIn(0, 7)
+        firstColor = int(KEY_FIRST_COLOR, 0xff6200ee.toInt())
+        secondColor = int(KEY_SECOND_COLOR, 0xff0000ff.toInt())
+        glowIntensity = int(KEY_GLOW_INTENSITY, 60).coerceIn(0, 100)
         holdDuration = int(KEY_HOLD, 250).coerceIn(150, 1000).toLong()
         edgeWidth = int(KEY_EDGE_WIDTH, 16).coerceIn(8, 32).toFloat()
         movementTolerance = int(KEY_TOLERANCE, 100).coerceIn(50, 200)
@@ -227,7 +237,8 @@ constructor(
                 context.packageManager.defaultActivityIcon
             }
         }
-        val pie = PieView(windowContext, slices, appIcons, downX, downY, style, showClock, size / 100f)
+        val pie = PieView(windowContext, slices, appIcons, downX, downY, style, surfaceStyle,
+            firstColor, secondColor, glowIntensity, showClock, size / 100f)
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -326,6 +337,10 @@ constructor(
         private val cx: Float,
         private val cy: Float,
         private val style: Int,
+        private val surfaceStyle: Int,
+        private val firstColor: Int,
+        private val secondColor: Int,
+        private val glowIntensity: Int,
         private val showClock: Boolean,
         scale: Float,
     ) : View(context) {
@@ -352,9 +367,7 @@ constructor(
             color = accent
             maskFilter = BlurMaskFilter(10 * density, BlurMaskFilter.Blur.NORMAL)
         }
-        private var glowBitmap: Bitmap? = null
-        private val glowBounds = RectF()
-        private var glowSlice: String? = null
+        private val glowBitmaps = HashMap<String, Bitmap>()
         private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
@@ -436,37 +449,67 @@ constructor(
             }
         }
 
-        // Cache the selected slice's soft halo on a software canvas. The normal
+        // Cache each slice's soft halo on a software canvas. The normal
         // hardware canvas ignores mask filters; keep the blur outside the slice.
         private fun drawNeonHalo(canvas: Canvas, slice: String, shape: Path) {
             val bounds = RectF()
             shape.computeBounds(bounds, true)
             if (bounds.isEmpty) return
-            val blur = 10.4f * density // Same blur as notification neon at 60%.
-            val pad = kotlin.math.ceil(blur * 2f).toInt()
-            if (glowBitmap == null || glowSlice != slice || glowBounds != bounds) {
+            if (glowIntensity <= 0) return
+            val blur = (2f + 14f * glowIntensity / 100f) * density
+            val pad = kotlin.math.ceil(blur * 3f).toInt()
+            val end = if (style == STYLE_DUAL_NEON) secondColor else firstColor
+            val bitmap = glowBitmaps.getOrPut(slice) {
                 val w = kotlin.math.ceil((bounds.width() + pad * 2f) * .5f).toInt().coerceAtLeast(1)
                 val h = kotlin.math.ceil((bounds.height() + pad * 2f) * .5f).toInt().coerceAtLeast(1)
-                val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                Canvas(bitmap).apply {
-                    scale(.5f, .5f)
-                    translate(pad - bounds.left, pad - bounds.top)
-                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = accent
-                        alpha = 99 // 65% halo opacity at 60% intensity.
-                        maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
+                Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { image ->
+                    Canvas(image).apply {
+                        scale(.5f, .5f)
+                        translate(pad - bounds.left, pad - bounds.top)
+                        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            shader = LinearGradient(bounds.left, 0f, bounds.right, 0f,
+                                firstColor, end, Shader.TileMode.CLAMP)
+                            alpha = glowIntensity * 65 * 255 / 10000
+                            maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
+                        }
+                        drawPath(shape, paint)
                     }
-                    drawPath(shape, paint)
                 }
-                glowBitmap = bitmap
-                glowSlice = slice
-                glowBounds.set(bounds)
             }
             canvas.save()
             canvas.clipOutPath(shape)
-            glowBitmap?.let { bitmap ->
-                canvas.drawBitmap(bitmap, null, RectF(bounds.left - pad, bounds.top - pad,
-                    bounds.right + pad, bounds.bottom + pad), bitmapPaint)
+            canvas.drawBitmap(bitmap, null, RectF(bounds.left - pad, bounds.top - pad,
+                bounds.right + pad, bounds.bottom + pad), bitmapPaint)
+            canvas.restore()
+        }
+
+        private fun drawSurfaceStyle(canvas: Canvas, shape: Path) {
+            if (surfaceStyle == 0) return
+            val bounds = RectF().also { shape.computeBounds(it, true) }
+            val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            canvas.save()
+            canvas.clipPath(shape)
+            if (surfaceStyle == 2 || surfaceStyle == 3 || surfaceStyle == 5 || surfaceStyle == 7) {
+                val first = if (surfaceStyle == 3) 0x40000000 else 0x40ffffff
+                val last = if (surfaceStyle == 2) Color.TRANSPARENT else 0x33000000
+                p.shader = LinearGradient(bounds.left, bounds.top,
+                    if (surfaceStyle == 7) bounds.right else bounds.left,
+                    if (surfaceStyle == 7) bounds.top else bounds.bottom,
+                    first, last, Shader.TileMode.CLAMP)
+                canvas.drawRect(bounds, p)
+                p.shader = null
+            }
+            if (surfaceStyle == 6) {
+                p.color = 0x29ffffff
+                canvas.drawRect(bounds.left, bounds.top, bounds.centerX(), bounds.bottom, p)
+                p.color = 0x29000000
+                canvas.drawRect(bounds.centerX(), bounds.top, bounds.right, bounds.bottom, p)
+            }
+            if (surfaceStyle in intArrayOf(1, 2, 4, 5, 6)) {
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = density * if (surfaceStyle == 1 || surfaceStyle == 6) 2f else 1f
+                p.color = 0x80ffffff.toInt()
+                canvas.drawPath(shape, p)
             }
             canvas.restore()
         }
@@ -482,27 +525,52 @@ constructor(
                 path.arcTo(RectF(cx - ra, cy - ra, cx + ra, cy + ra), a0 + sweep - gap, -(sweep - gap))
                 path.close()
                 val on = slice == selected
+                val neon = style == STYLE_NEON || style == STYLE_DUAL_NEON
+                val color = style == STYLE_COLOR || style == STYLE_DUAL_COLOR
+                val endColor = if (style == STYLE_DUAL_COLOR || style == STYLE_DUAL_NEON)
+                    secondColor else firstColor
+                segPaint.shader = null
                 segPaint.color = when {
-                    on && style == STYLE_NEON -> (accent and 0x00ffffff) or 0x38000000
+                    neon -> (firstColor and 0x00ffffff) or (if (on) 0x50000000 else 0x28000000)
+                    color -> firstColor
                     on -> accent
                     glass -> 0x59FFFFFF
                     classic -> 0xE6202020.toInt()
                     else -> 0xE6120A0C.toInt()
                 }
-                if (on && style == STYLE_NEON) drawNeonHalo(canvas, slice, path)
+                if (neon || color) {
+                    val bounds = RectF().also { path.computeBounds(it, true) }
+                    val fillFirst = if (neon) (firstColor and 0x00ffffff) or
+                        (minOf(Color.alpha(firstColor), 56) shl 24) else firstColor
+                    val fillEnd = if (neon) (endColor and 0x00ffffff) or
+                        (minOf(Color.alpha(endColor), 56) shl 24) else endColor
+                    segPaint.shader = LinearGradient(bounds.left, 0f, bounds.right.coerceAtLeast(bounds.left + 1f), 0f,
+                        fillFirst, fillEnd, Shader.TileMode.CLAMP)
+                    segPaint.alpha = 255
+                }
+                if (neon) drawNeonHalo(canvas, slice, path)
                 if (on && glass) canvas.drawPath(path, glowPaint)
                 canvas.drawPath(path, segPaint)
-                if (on && style == STYLE_NEON) {
+                segPaint.shader = null
+                drawSurfaceStyle(canvas, path)
+                if (neon && glowIntensity > 0) {
+                    val bounds = RectF().also { path.computeBounds(it, true) }
                     canvas.save()
                     canvas.clipPath(path)
-                    strokePaint.color = accent
+                    strokePaint.shader = LinearGradient(bounds.left, 0f,
+                        bounds.right.coerceAtLeast(bounds.left + 1f), 0f,
+                        firstColor, endColor, Shader.TileMode.CLAMP)
                     for (layer in 5 downTo 1) {
                         strokePaint.strokeWidth = layer * 2f * density
-                        strokePaint.alpha = if (layer == 1) 138 else 15
+                        val selectionStrength = if (on) 100 else 70
+                        strokePaint.alpha = (if (layer == 1) glowIntensity * 230 / 100
+                            else glowIntensity * 25 / 100) * selectionStrength / 100
                         canvas.drawPath(path, strokePaint)
                     }
+                    strokePaint.shader = null
                     canvas.restore()
                     strokePaint.strokeWidth = density
+                    strokePaint.alpha = 255
                 } else {
                     strokePaint.color = if (glass) 0x80FFFFFF.toInt() else 0x26FFFFFF
                     canvas.drawPath(path, strokePaint)
@@ -514,7 +582,9 @@ constructor(
                 val half = 12 * density * (if (on) 1.2f else 1f)
                 icons[slice]?.let {
                     if (!slice.startsWith(APP_PREFIX)) {
-                        it.setTint(if (glass && !on) 0xFF1B1517.toInt() else Color.WHITE)
+                        val lightColor = color && (Color.luminance(firstColor)
+                            + Color.luminance(endColor)) / 2f > .5f
+                        it.setTint(if (glass && !on || lightColor) 0xFF1B1517.toInt() else Color.WHITE)
                     }
                     it.setBounds((ix - half).toInt(), (iy - half).toInt(), (ix + half).toInt(), (iy + half).toInt())
                     it.draw(canvas)
@@ -537,8 +607,12 @@ constructor(
         const val KEY_APP_ICON_PACK = "pie_app_icon_pack"
         private const val APP_PREFIX = "app:"
         private const val MAX_APPS = 6
-        /** 0 neon, 1 glass, 2 classic. */
+        /** 0 neon, 1 glass, 2 classic, 3 dual neon, 4 color, 5 dual color. */
         const val KEY_STYLE = "pie_style"
+        const val KEY_SURFACE_STYLE = "pie_surface_style"
+        const val KEY_FIRST_COLOR = "pie_first_color"
+        const val KEY_SECOND_COLOR = "pie_second_color"
+        const val KEY_GLOW_INTENSITY = "pie_glow_intensity"
         const val KEY_CLOCK = "pie_clock"
         /** 60 to 150, percent. */
         const val KEY_SIZE = "pie_size"
@@ -546,7 +620,8 @@ constructor(
         const val KEY_EDGE_WIDTH = "pie_edge_width"
         const val KEY_TOLERANCE = "pie_movement_tolerance"
         private val KEYS = arrayOf(KEY_ENABLED, KEY_EDGES, KEY_ZONE, KEY_ITEMS, KEY_STYLE, KEY_CLOCK,
-            KEY_SIZE, KEY_HOLD, KEY_EDGE_WIDTH, KEY_TOLERANCE, KEY_APPS, KEY_APP_ICON_PACK, KEY_APPS_ENABLED)
+            KEY_SIZE, KEY_HOLD, KEY_EDGE_WIDTH, KEY_TOLERANCE, KEY_APPS, KEY_APP_ICON_PACK, KEY_APPS_ENABLED,
+            KEY_SURFACE_STYLE, KEY_FIRST_COLOR, KEY_SECOND_COLOR, KEY_GLOW_INTENSITY)
 
         private const val EDGES_LEFT = 0
         private const val EDGES_RIGHT = 1
@@ -557,6 +632,9 @@ constructor(
         private const val STYLE_NEON = 0
         private const val STYLE_GLASS = 1
         private const val STYLE_CLASSIC = 2
+        private const val STYLE_DUAL_NEON = 3
+        private const val STYLE_COLOR = 4
+        private const val STYLE_DUAL_COLOR = 5
 
         private const val BACK = "back"
         private const val HOME = "home"
