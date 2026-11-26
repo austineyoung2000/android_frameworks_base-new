@@ -41,7 +41,7 @@ class KeyguardWidgetViewSection @Inject constructor(
     private var widgetView: LockScreenWidgets? = null
     private var appWidgets: WidgetViewport? = null
     private var controller: KeyguardWidgetHostController? = null
-    private var layoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
+    private var layoutListener: ViewTreeObserver.OnPreDrawListener? = null
     private var contentIds = intArrayOf()
     private var splitShade = false
 
@@ -77,8 +77,8 @@ class KeyguardWidgetViewSection @Inject constructor(
         val viewport = appWidgets ?: return
         controller = KeyguardWidgetHostController(context, viewport, activityStarter, falsingManager,
             userTracker, keyguardStateController, trampolineInteractor, dialogFactory).also { it.attach() }
-        val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            if (viewport.visibility != View.VISIBLE) return@OnGlobalLayoutListener
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            if (viewport.visibility != View.VISIBLE) return@OnPreDrawListener true
             val density = context.resources.displayMetrics.density
             val reserved = (96 * density).toInt()
             val rootBounds = Rect()
@@ -93,13 +93,13 @@ class KeyguardWidgetViewSection @Inject constructor(
                 }
                 return bottom
             }
-            val clockBottom = listOf(R.id.clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
-                ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE)
+            val contentBottom = listOf(R.id.clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE, R.id.keyguard_info_widgets)
                 .mapNotNull { constraintLayout.findViewById<View>(it) }.maxOfOrNull(::visualBottom) ?: 0
             val anchor = constraintLayout.findViewById<View>(R.id.keyguard_app_widget_anchor)
             val params = viewport.layoutParams as? ConstraintLayout.LayoutParams
             if (anchor != null && params != null) {
-                val margin = (8 * density).toInt() + (clockBottom - anchor.bottom).coerceAtLeast(0)
+                val margin = (8 * density).toInt() + (contentBottom - anchor.bottom).coerceAtLeast(0)
                 if (params.topMargin != margin) { params.topMargin = margin; viewport.layoutParams = params }
             }
             val limit = listOf(R.id.device_entry_icon_view, R.id.keyguard_indication_area,
@@ -107,11 +107,14 @@ class KeyguardWidgetViewSection @Inject constructor(
                 .mapNotNull { constraintLayout.findViewById<View>(it) }
                 .filter { it.visibility != View.GONE && it.top > 0 }
                 .minOfOrNull { it.top } ?: (constraintLayout.height - reserved)
+            val gap = (8 * density).toInt()
             viewport.maximumHeight = minOf((constraintLayout.height * 0.45f).toInt(),
-                limit - viewport.top - reserved).coerceAtLeast(0)
+                limit - viewport.top - gap,
+                constraintLayout.height - viewport.top - reserved).coerceAtLeast(0)
+            true
         }
         layoutListener = listener
-        constraintLayout.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        constraintLayout.viewTreeObserver.addOnPreDrawListener(listener)
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -153,7 +156,11 @@ class KeyguardWidgetViewSection @Inject constructor(
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
-        layoutListener?.let { constraintLayout.viewTreeObserver.removeOnGlobalLayoutListener(it) }
+        layoutListener?.let {
+            if (constraintLayout.viewTreeObserver.isAlive) {
+                constraintLayout.viewTreeObserver.removeOnPreDrawListener(it)
+            }
+        }
         layoutListener = null
         controller?.detach()
         controller = null
