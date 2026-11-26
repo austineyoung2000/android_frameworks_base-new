@@ -273,6 +273,11 @@ fun ContentScope.Tile(
         val stockTileShape by TileDefaults.animateTileShapeAsState(
             state = uiState.visualState, iconOnly = iconOnly
         )
+        val isNeon = when (uiState.visualState) {
+            STATE_ACTIVE -> labelColors.activeEffect in 5..6
+            STATE_INACTIVE -> labelColors.inactiveEffect in 5..6
+            else -> false
+        }
         val tileShape = when (labelColors.tileShape) {
             1 -> RoundedCornerShape(0.dp)
             2 -> RoundedCornerShape(14.dp)
@@ -280,7 +285,7 @@ fun ContentScope.Tile(
                 topStart = 24.dp, topEnd = 2.dp, bottomEnd = 24.dp, bottomStart = 2.dp
             )
             4 -> RoundedCornerShape(50)
-            else -> stockTileShape
+            else -> if (iconOnly && isNeon) RoundedCornerShape(50) else stockTileShape
         }
         val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
 
@@ -314,7 +319,13 @@ fun ContentScope.Tile(
         }
 
         TileExpandable(
-            color = { if (qsTileUsesBlur(labelColors, uiState.visualState)) Color.Transparent else animatedColor },
+            color = {
+                if (qsTileUsesBlur(labelColors, uiState.visualState) || (iconOnly && isNeon)) {
+                    Color.Transparent
+                } else {
+                    animatedColor
+                }
+            },
             shape = tileShape,
             squishiness = if (iconOnly) { { 1f } } else squishiness,
             hapticsViewModel = hapticsViewModel,
