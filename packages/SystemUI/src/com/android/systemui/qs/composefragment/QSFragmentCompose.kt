@@ -1617,6 +1617,11 @@ constructor(
                                                 ) {
                                                     OneUiInsideTileArea(
                                                         insideSpecs = insideTiles,
+                                                        maxVisibleTiles = if (!containerExpanded && !isEditingSections) {
+                                                            collapsedRows * 4
+                                                        } else {
+                                                            null
+                                                        },
                                                         allTilesMap = insideAllTilesMap,
                                                         isEditMode = false,
                                                         isDropTarget = isEditingSections && !isEditingOneUi &&
