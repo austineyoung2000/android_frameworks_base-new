@@ -393,7 +393,11 @@ public class NotificationBackgroundView extends View implements Dumpable,
         float density = getResources().getDisplayMetrics().density;
         // The soft halo must be drawn before the card-shaped clip; only the sharp edge
         // strokes below should be restricted to the inside of the notification.
+        // Keep the filled blur outside the card so it cannot wash out the selected style.
+        canvas.save();
+        canvas.clipOutPath(path);
         drawCachedCardGlow(canvas, bounds, density, second);
+        canvas.restore();
         canvas.clipPath(path);
         Paint paint = mCardStylePaint;
         paint.reset();

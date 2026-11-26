@@ -313,6 +313,7 @@ fun GlassSliderCore(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
+            .then(Modifier.brightnessNeon(appearance, isVertical, defaultFill))
             .clip(CircleShape)
             .then(if (appearance.customized) {
                 Modifier.brightnessAppearance(appearance, fraction, isVertical, defaultFill, defaultTrack)

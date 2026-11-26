@@ -81,6 +81,8 @@ import com.android.systemui.brightness.domain.model.GammaBrightness
 import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
 import com.android.systemui.brightness.ui.compose.rememberBrightnessAppearance
 import com.android.systemui.brightness.ui.compose.brightnessAppearance
+import com.android.systemui.brightness.ui.compose.brightnessNeon
+import com.android.systemui.brightness.ui.compose.BrightnessAppearance
 import com.android.systemui.brightness.ui.viewmodel.Drag
 import com.android.systemui.common.shared.model.Icon as SysIcon
 import com.android.systemui.dagger.qualifiers.Background
@@ -229,6 +231,7 @@ fun BrightnessTileContent(
                     enabled = enabled,
                     painter = sliderPainter,
                     isVertical = true,
+                    customizeAppearance = true,
                 )
             }
 
@@ -289,6 +292,7 @@ fun BrightnessTileContent(
                     enabled = enabled,
                     painter = sliderPainter,
                     isVertical = false,
+                    customizeAppearance = true,
                 )
             }
 
@@ -326,9 +330,10 @@ fun TileGlassSliderCore(
     enabled: Boolean,
     painter: Painter,
     isVertical: Boolean,
+    customizeAppearance: Boolean = false,
 ) {
     val view = LocalView.current
-    val appearance = rememberBrightnessAppearance()
+    val appearance = if (customizeAppearance) rememberBrightnessAppearance() else BrightnessAppearance()
     val defaultFill = MaterialTheme.colorScheme.primary
     val defaultTrack = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     val sliderIconTint = appearance.fill?.let {
@@ -361,6 +366,7 @@ fun TileGlassSliderCore(
                     }
                 }
             }
+            .then(Modifier.brightnessNeon(appearance, isVertical, defaultFill))
             .clip(CircleShape)
             .then(if (appearance.customized) {
                 Modifier.brightnessAppearance(appearance, fraction, isVertical, defaultFill, defaultTrack)
