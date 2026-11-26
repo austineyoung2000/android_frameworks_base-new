@@ -46,6 +46,15 @@ import java.util.ArrayList;
  * changed
  */
 public class PasswordTextView extends BasePasswordTextView {
+    private final PinViewDecoration mPinDecoration = new PinViewDecoration(this, () -> {});
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mPinDecoration.attach();
+    }
+    @Override protected void onDetachedFromWindow() {
+        mPinDecoration.detach();
+        super.onDetachedFromWindow();
+    }
     public static final long APPEAR_DURATION = 160;
     public static final long DISAPPEAR_DURATION = 160;
     private static final float DOT_OVERSHOOT_FACTOR = 1.5f;
@@ -651,7 +660,18 @@ public class PasswordTextView extends BasePasswordTextView {
                 canvas.save();
                 float centerX = currentDrawPosition + charWidth / 2;
                 canvas.translate(centerX, yPosition);
-                canvas.drawCircle(0, 0, mDotSize / 2 * currentDotSizeFactor, mDrawPaint);
+                float dotRadius = mDotSize / 2f * currentDotSizeFactor;
+                if (mPinDecoration.active() && dotRadius > 0f) {
+                    canvas.save();
+                    canvas.translate(-dotRadius, -dotRadius);
+                    int diameter = Math.max(1, Math.round(dotRadius * 2f));
+                    mPinDecoration.draw(canvas, diameter, diameter);
+                    canvas.restore();
+                }
+                int originalDotColor = mDrawPaint.getColor();
+                if (mPinDecoration.customColor()) mDrawPaint.setColor(mPinDecoration.firstColor());
+                canvas.drawCircle(0, 0, dotRadius, mDrawPaint);
+                mDrawPaint.setColor(originalDotColor);
                 canvas.restore();
             }
             return charWidth + mCharPadding * currentWidthFactor;

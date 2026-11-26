@@ -18,6 +18,8 @@ package com.android.keyguard;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.graphics.Canvas;
+import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -38,6 +40,29 @@ import com.android.systemui.bouncer.shared.constants.KeyguardBouncerConstants;
  * allows the user to return to the call.
  */
 public class EmergencyButton extends Button {
+
+    private final PinViewDecoration mPinDecoration = new PinViewDecoration(this, this::updatePinDecoration);
+    private ColorStateList mPinOriginalTint;
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mPinOriginalTint = getBackgroundTintList();
+        mPinDecoration.attach();
+    }
+    @Override protected void onDetachedFromWindow() {
+        if (mPinDecoration.isDevicePin()) setBackgroundTintList(mPinOriginalTint);
+        mPinDecoration.detach();
+        super.onDetachedFromWindow();
+    }
+    private void updatePinDecoration() {
+        setBackgroundTintList(mPinDecoration.customColor()
+                ? ColorStateList.valueOf(android.graphics.Color.TRANSPARENT) : mPinOriginalTint);
+        invalidate();
+    }
+    @Override protected void onDraw(Canvas canvas) {
+        mPinDecoration.draw(canvas, getWidth(), getHeight());
+        super.onDraw(canvas);
+    }
 
     private final EmergencyAffordanceManager mEmergencyAffordanceManager;
 

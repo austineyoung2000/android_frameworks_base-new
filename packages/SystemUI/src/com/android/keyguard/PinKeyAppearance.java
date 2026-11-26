@@ -41,12 +41,18 @@ final class PinKeyAppearance {
     boolean enabled() { return effect != 0 || style != 0; }
     boolean customColor() { return effect != 0; }
     int digitColor() { return digit; }
+    int firstColor() { return first; }
 
     void draw(Canvas canvas, int w, int h, float density, boolean enabled) {
+        draw(canvas, w, h, density, enabled, -1);
+    }
+
+    // Other credential controls keep their native circular or pill geometry.
+    void draw(Canvas canvas, int w, int h, float density, boolean enabled, int shapeOverride) {
         if (!enabled() || w <= 0 || h <= 0 || w > 1024 || h > 1024 || density <= 0) return;
         float inset = Math.min(Math.min(w, h) * .08f, 4f * density);
         RectF rect = new RectF(inset, inset, w - inset, h - inset);
-        int displayShape = effect == 0 ? 0 : shape;
+        int displayShape = shapeOverride >= 0 ? shapeOverride : effect == 0 ? 0 : shape;
         float radius = displayShape == 2 ? 3f * density : displayShape == 1 ? 14f * density
                 : displayShape == 3 ? Math.min(rect.width(), rect.height()) * .30f
                 : Math.min(rect.width(), rect.height()) * .5f;

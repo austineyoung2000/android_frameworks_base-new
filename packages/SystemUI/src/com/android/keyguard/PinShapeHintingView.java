@@ -19,6 +19,7 @@ package com.android.keyguard;
 import static com.android.systemui.bouncer.shared.constants.KeyguardBouncerConstants.ColorId.PIN_SHAPES;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
@@ -38,6 +39,40 @@ import com.android.systemui.res.R;
  * six digit pin on their device
  */
 public class PinShapeHintingView extends LinearLayout implements PinShapeInput {
+    private final PinViewDecoration mPinDecoration = new PinViewDecoration(this, this::refreshPinShapeColors);
+    private void refreshPinShapeColors() {
+        for (int i = 0; i < Math.min(mPosition, getChildCount()); i++) {
+            View child = getChildAt(i);
+            if (child instanceof ImageView && ((ImageView) child).getDrawable() != null) {
+                ((ImageView) child).getDrawable().mutate().setTint(getPinShapeColor());
+            }
+        }
+    }
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mPinDecoration.attach();
+    }
+    @Override protected void onDetachedFromWindow() {
+        mPinDecoration.detach();
+        super.onDetachedFromWindow();
+    }
+    @Override protected void dispatchDraw(Canvas canvas) {
+        if (mPinDecoration.active()) {
+            // Decorate only entered indicators; leave unused PIN hints visually distinct.
+            for (int i = 0; i < Math.min(mPosition, getChildCount()); i++) {
+                View dot = getChildAt(i);
+                if (dot.getVisibility() != View.VISIBLE) continue;
+                canvas.save();
+                canvas.translate(dot.getX() + dot.getWidth() / 2f, dot.getY() + dot.getHeight() / 2f);
+                canvas.scale(dot.getScaleX(), dot.getScaleY());
+                canvas.translate(-dot.getWidth() / 2f, -dot.getHeight() / 2f);
+                mPinDecoration.draw(canvas, dot.getWidth(), dot.getHeight());
+                canvas.restore();
+            }
+        }
+        super.dispatchDraw(canvas);
+    }
+
 
     private int mPinLength;
     private int mDotDiameter;
@@ -126,6 +161,7 @@ public class PinShapeHintingView extends LinearLayout implements PinShapeInput {
     }
 
     private int getPinShapeColor() {
+        if (mPinDecoration.customColor()) return mPinDecoration.firstColor();
         if (Flags.bouncerUiRevamp2()) {
             return mContext.getColor(Color.shape);
         } else {

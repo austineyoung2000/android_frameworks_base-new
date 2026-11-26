@@ -23,6 +23,7 @@ import static com.android.keyguard.NumPadAnimatableKt.DISABLED_FOREGROUND_ALPHA;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.VectorDrawable;
@@ -42,6 +43,30 @@ import com.android.systemui.util.ColorUtilKt;
 /** Similar to the {@link NumPadKey}, but displays an image. */
 public class NumPadButton extends AlphaOptimizedImageButton
         implements NumPadAnimationListener, NumPadAnimatable {
+
+    private final PinViewDecoration mPinDecoration = new PinViewDecoration(this, this::updatePinDecoration);
+    private ColorStateList mPinOriginalTint;
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (getId() != R.id.key_enter) return;
+        mPinOriginalTint = getBackgroundTintList();
+        mPinDecoration.attach();
+    }
+    @Override protected void onDetachedFromWindow() {
+        if (mPinDecoration.isDevicePin()) setBackgroundTintList(mPinOriginalTint);
+        mPinDecoration.detach();
+        super.onDetachedFromWindow();
+    }
+    private void updatePinDecoration() {
+        setBackgroundTintList(mPinDecoration.customColor()
+                ? ColorStateList.valueOf(android.graphics.Color.TRANSPARENT) : mPinOriginalTint);
+        invalidate();
+    }
+    @Override protected void onDraw(Canvas canvas) {
+        mPinDecoration.draw(canvas, getWidth(), getHeight());
+        super.onDraw(canvas);
+    }
 
     @Nullable
     private NumPadAnimator mAnimator;
@@ -132,6 +157,7 @@ public class NumPadButton extends AlphaOptimizedImageButton
      **/
     public void reloadColors() {
         if (mAnimator != null) mAnimator.reloadColors(getContext());
+        if (mPinDecoration.active()) updatePinDecoration();
 
         if (lockscreenTimeoutDeactivatePinPad()) {
             reloadIconTintWithAlpha(isEnabled() ? 1f : DISABLED_FOREGROUND_ALPHA);
