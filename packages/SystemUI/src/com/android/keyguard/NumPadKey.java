@@ -67,6 +67,7 @@ public class NumPadKey extends ViewGroup implements NumPadAnimationListener, Num
     private ColorStateList mPinOriginalDigitColors;
     private ColorStateList mPinOriginalLetterColors;
     private boolean mDevicePinKey;
+    private boolean mPinOriginalClipChildren;
     private final ContentObserver mPinAppearanceObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
         @Override public void onChange(boolean selfChange) { updatePinAppearance(); }
     };
@@ -79,6 +80,10 @@ public class NumPadKey extends ViewGroup implements NumPadAnimationListener, Num
             parent = parent.getParent();
         }
         if (!mDevicePinKey) return;
+        // Device PIN key parents already allow overflow; allow the digit-key drawing
+        // to extend too, so the neon blur is not cropped to a square around the key.
+        mPinOriginalClipChildren = getClipChildren();
+        setClipChildren(false);
         mPinOriginalTint = getBackgroundTintList();
         mPinOriginalDigitColors = mDigitText.getTextColors();
         mPinOriginalLetterColors = mKlondikeText.getTextColors();
@@ -93,6 +98,7 @@ public class NumPadKey extends ViewGroup implements NumPadAnimationListener, Num
         if (mDevicePinKey) {
             getContext().getContentResolver().unregisterContentObserver(mPinAppearanceObserver);
             setBackgroundTintList(mPinOriginalTint);
+            setClipChildren(mPinOriginalClipChildren);
             mDigitText.setTextColor(mPinOriginalDigitColors);
             mKlondikeText.setTextColor(mPinOriginalLetterColors);
             mDevicePinKey = false;

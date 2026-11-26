@@ -54,7 +54,13 @@ final class PinKeyAppearance {
         Path path = new Path();
         path.addRoundRect(rect, radius, radius, Path.Direction.CW);
         int end = effect == 2 || effect == 4 ? second : first;
-        int save = canvas.saveLayerAlpha(null, enabled ? 255 : 100);
+        // Include the full blur in the offscreen layer. A null layer bound can be
+        // clipped to the key rectangle, leaving a hard square edge on the halo.
+        int haloPadding = (effect == 3 || effect == 4) && intensity > 0
+                ? (int) Math.ceil((2f + 14f * intensity / 100f) * density * 2f) : 0;
+        RectF layerBounds = new RectF(-haloPadding, -haloPadding,
+                w + haloPadding, h + haloPadding);
+        int save = canvas.saveLayerAlpha(layerBounds, enabled ? 255 : 100);
         try {
             if ((effect == 3 || effect == 4) && intensity > 0) {
                 drawHalo(canvas, w, h, density, rect, radius, end, path);
