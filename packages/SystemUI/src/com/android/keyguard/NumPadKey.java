@@ -100,15 +100,15 @@ public class NumPadKey extends ViewGroup implements NumPadAnimationListener, Num
         super.onDetachedFromWindow();
     }
 
-    boolean hasPinCustomAppearance() { return mDevicePinKey && mPinAppearance.enabled(); }
+    boolean hasPinCustomAppearance() { return mDevicePinKey && mPinAppearance.customColor(); }
 
     private void updatePinAppearance() {
         if (!mDevicePinKey) return;
         mPinAppearance.read(getContext());
-        setBackgroundTintList(mPinAppearance.enabled()
+        setBackgroundTintList(mPinAppearance.customColor()
                 ? ColorStateList.valueOf(android.graphics.Color.TRANSPARENT) : mPinOriginalTint);
-        mDigitText.setTextColor(mPinAppearance.enabled() ? ColorStateList.valueOf(mPinAppearance.digitColor()) : mPinOriginalDigitColors);
-        mKlondikeText.setTextColor(mPinAppearance.enabled() ? ColorStateList.valueOf(mPinAppearance.digitColor()) : mPinOriginalLetterColors);
+        mDigitText.setTextColor(mPinAppearance.customColor() ? ColorStateList.valueOf(mPinAppearance.digitColor()) : mPinOriginalDigitColors);
+        mKlondikeText.setTextColor(mPinAppearance.customColor() ? ColorStateList.valueOf(mPinAppearance.digitColor()) : mPinOriginalLetterColors);
         invalidate();
     }
 

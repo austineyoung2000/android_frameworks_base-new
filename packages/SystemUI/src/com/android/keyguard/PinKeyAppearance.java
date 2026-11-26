@@ -11,6 +11,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.os.UserHandle;
@@ -19,10 +20,12 @@ import android.provider.Settings;
 /** Visual-only decoration for device PIN digit keys. No credential data is read. */
 final class PinKeyAppearance {
     static final String[] KEYS = {"rising_pin_effect", "rising_pin_shape", "rising_pin_first_color",
-            "rising_pin_second_color", "rising_pin_digit_color", "rising_pin_glow_intensity"};
-    private int effect, shape, first, second, digit, intensity;
-    private Bitmap bitmap;
-    private int width, height;
+            "rising_pin_second_color", "rising_pin_digit_color", "rising_pin_glow_intensity",
+            "rising_pin_style"};
+    private int effect, shape, first, second, digit, intensity, style;
+    private Bitmap halo;
+    private int width, height, padding;
+    private float cachedDensity;
 
     void read(Context context) {
         var r = context.getContentResolver();
@@ -32,38 +35,90 @@ final class PinKeyAppearance {
         second = Settings.System.getIntForUser(r, KEYS[3], 0xff0000ff, UserHandle.USER_CURRENT);
         digit = Settings.System.getIntForUser(r, KEYS[4], Color.WHITE, UserHandle.USER_CURRENT);
         intensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(r, KEYS[5], 60, UserHandle.USER_CURRENT)));
-        bitmap = null;
+        style = Math.max(0, Math.min(7, Settings.System.getIntForUser(r, KEYS[6], 0, UserHandle.USER_CURRENT)));
+        halo = null;
     }
-    boolean enabled() { return effect != 0; }
+    boolean enabled() { return effect != 0 || style != 0; }
+    boolean customColor() { return effect != 0; }
     int digitColor() { return digit; }
+
     void draw(Canvas canvas, int w, int h, float density, boolean enabled) {
-        if (!enabled() || w <= 0 || h <= 0 || w > 1024 || h > 1024) return;
-        if (bitmap == null || w != width || h != height) {
-            width = w; height = h;
-            bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            Canvas soft = new Canvas(bitmap);
-            float inset = Math.min(Math.min(w, h) * .20f, 12f * density);
-            RectF rect = new RectF(inset, inset, w - inset, h - inset);
-            float radius = shape == 2 ? 3f * density : shape == 1 ? 14f * density
-                    : shape == 3 ? Math.min(w, h) * .30f : Math.min(w, h) * .5f;
-            int end = effect == 2 || effect == 4 ? second : first;
-            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-            p.setShader(new LinearGradient(rect.left, 0, rect.right, 0, first, end, Shader.TileMode.CLAMP));
+        if (!enabled() || w <= 0 || h <= 0 || w > 1024 || h > 1024 || density <= 0) return;
+        float inset = Math.min(Math.min(w, h) * .08f, 4f * density);
+        RectF rect = new RectF(inset, inset, w - inset, h - inset);
+        int displayShape = effect == 0 ? 0 : shape;
+        float radius = displayShape == 2 ? 3f * density : displayShape == 1 ? 14f * density
+                : displayShape == 3 ? Math.min(rect.width(), rect.height()) * .30f
+                : Math.min(rect.width(), rect.height()) * .5f;
+        radius = Math.min(radius, Math.min(rect.width(), rect.height()) / 2f);
+        Path path = new Path();
+        path.addRoundRect(rect, radius, radius, Path.Direction.CW);
+        int end = effect == 2 || effect == 4 ? second : first;
+        int save = canvas.saveLayerAlpha(null, enabled ? 255 : 100);
+        try {
             if ((effect == 3 || effect == 4) && intensity > 0) {
-                p.setMaskFilter(new BlurMaskFilter((2f + 7f * intensity / 100f) * density,
-                        BlurMaskFilter.Blur.NORMAL));
-                p.setAlpha(150 * intensity / 100);
-                soft.drawRoundRect(rect, radius, radius, p);
-                p.setMaskFilter(null); p.setAlpha(100);
-            } else { p.setAlpha(255); }
-            soft.drawRoundRect(rect, radius, radius, p);
-            if (effect == 3 || effect == 4) {
-                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f * density);
-                p.setAlpha(255 * intensity / 100); soft.drawRoundRect(rect, radius, radius, p);
+                drawHalo(canvas, w, h, density, rect, radius, end, path);
             }
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            if (effect != 0) {
+                p.setShader(new LinearGradient(rect.left, 0, rect.right, 0, first, end, Shader.TileMode.CLAMP));
+                p.setAlpha(effect == 3 || effect == 4 ? 56 : 255);
+                canvas.drawPath(path, p);
+                p.setShader(null);
+            }
+            canvas.save(); canvas.clipPath(path);
+            if (style == 2 || style == 3 || style == 5 || style == 7) {
+                int top = style == 3 ? 0x40000000 : 0x40ffffff;
+                int bottom = style == 2 ? Color.TRANSPARENT : 0x33000000;
+                boolean horizontal = style == 7;
+                p.setShader(new LinearGradient(rect.left, rect.top,
+                        horizontal ? rect.right : rect.left, horizontal ? rect.top : rect.bottom,
+                        top, bottom, Shader.TileMode.CLAMP));
+                p.setAlpha(255); canvas.drawRect(rect, p); p.setShader(null);
+            }
+            if (style == 6) {
+                p.setColor(0x29ffffff); canvas.drawRect(rect.left, rect.top,
+                        rect.left + rect.width() * .55f, rect.bottom, p);
+                p.setColor(0x29000000); canvas.drawRect(rect.left + rect.width() * .58f,
+                        rect.top, rect.right, rect.bottom, p);
+            }
+            if (style == 1 || style == 2 || style == 4 || style == 5 || style == 6) {
+                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(density * (style == 1 || style == 6 ? 2f : 1f));
+                p.setColor(0x80ffffff); canvas.drawPath(path, p); p.setStyle(Paint.Style.FILL);
+            }
+            if ((effect == 3 || effect == 4) && intensity > 0) {
+                p.setStyle(Paint.Style.STROKE);
+                p.setShader(new LinearGradient(rect.left, 0, rect.right, 0, first, end, Shader.TileMode.CLAMP));
+                for (int layer = 5; layer >= 1; layer--) {
+                    p.setStrokeWidth(layer * 2f * density);
+                    int alpha = 255 * intensity / 100;
+                    p.setAlpha(layer == 1 ? alpha * 9 / 10 : alpha / 10);
+                    canvas.drawPath(path, p);
+                }
+            }
+            canvas.restore();
+        } finally { canvas.restoreToCount(save); }
+    }
+
+    private void drawHalo(Canvas canvas, int w, int h, float density, RectF rect,
+            float radius, int end, Path path) {
+        if (halo == null || w != width || h != height || density != cachedDensity) {
+            width = w; height = h; cachedDensity = density;
+            float blur = (2f + 14f * intensity / 100f) * density;
+            padding = (int) Math.ceil(blur * 2f);
+            int bw = Math.max(1, (int) Math.ceil((w + 2f * padding) * .5f));
+            int bh = Math.max(1, (int) Math.ceil((h + 2f * padding) * .5f));
+            halo = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+            Canvas soft = new Canvas(halo); soft.scale(.5f, .5f); soft.translate(padding, padding);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setMaskFilter(new BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL));
+            p.setShader(new LinearGradient(rect.left, 0, rect.right, 0, first, end, Shader.TileMode.CLAMP));
+            p.setAlpha(intensity * 65 * 255 / 10000);
+            soft.drawRoundRect(rect, radius, radius, p);
         }
-        Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
-        if (!enabled) paint.setAlpha(100);
-        canvas.drawBitmap(bitmap, 0, 0, paint);
+        canvas.save(); canvas.clipOutPath(path);
+        canvas.drawBitmap(halo, null, new RectF(-padding, -padding, w + padding, h + padding),
+                new Paint(Paint.FILTER_BITMAP_FLAG));
+        canvas.restore();
     }
 }
