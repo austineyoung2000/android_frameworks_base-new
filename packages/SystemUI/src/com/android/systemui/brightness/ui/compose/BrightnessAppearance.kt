@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -122,8 +123,10 @@ internal fun Modifier.brightnessAppearance(
     val radius = minOf(width, height) / 2f
     val rect = RoundRect(Rect(left, top, left + width, top + height), CornerRadius(radius))
     val path = Path().apply { addRoundRect(rect) }
-    val fill = appearance.fill ?: defaultFill
-    val track = appearance.track ?: defaultTrack
+    val rawFill = appearance.fill ?: defaultFill
+    val rawTrack = appearance.track ?: defaultTrack
+    val fill = if (appearance.effect != 0) rawFill.copy(alpha = minOf(rawFill.alpha, 0.22f)) else rawFill
+    val track = if (appearance.effect != 0) rawTrack.copy(alpha = minOf(rawTrack.alpha, 0.22f)) else rawTrack
     val progress = fraction.coerceIn(0f, 1f)
     clipPath(path) {
         drawRect(track, topLeft = Offset(left, top), size = Size(width, height))
@@ -133,7 +136,8 @@ internal fun Modifier.brightnessAppearance(
             right = if (vertical) left + width else left + width * progress,
             bottom = top + height,
         ) {
-            val end = appearance.end
+            val rawEnd = appearance.end
+            val end = if (appearance.effect != 0) rawEnd?.copy(alpha = minOf(rawEnd.alpha, 0.22f)) else rawEnd
             if (end == null) {
                 drawRect(fill, topLeft = Offset(left, top), size = Size(width, height))
             } else {
@@ -234,11 +238,15 @@ internal fun Modifier.brightnessNeon(
         val colors = if (vertical) listOf(second, first) else listOf(first, second)
         val edge = if (vertical) Brush.verticalGradient(colors) else Brush.horizontalGradient(colors)
         onDrawWithContent {
-            drawIntoCanvas { it.nativeCanvas.drawBitmap(bitmap, null, destination, bitmapPaint) }
+            clipPath(path, clipOp = ClipOp.Difference) {
+                drawIntoCanvas { it.nativeCanvas.drawBitmap(bitmap, null, destination, bitmapPaint) }
+            }
             drawContent()
-            for (layer in 5 downTo 1) {
-                drawPath(path, edge, alpha = strength * if (layer == 1) 0.9f else 0.10f,
-                    style = Stroke(layer * 2f * density))
+            clipPath(path) {
+                for (layer in 5 downTo 1) {
+                    drawPath(path, edge, alpha = strength * if (layer == 1) 0.9f else 0.10f,
+                        style = Stroke(layer * 2f * density))
+                }
             }
         }
     }

@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.ContentObserver
+import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
@@ -338,6 +339,10 @@ constructor(
             color = accent
             maskFilter = BlurMaskFilter(10 * density, BlurMaskFilter.Blur.NORMAL)
         }
+        private var glowBitmap: Bitmap? = null
+        private val glowBounds = RectF()
+        private var glowSlice: String? = null
+        private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             textAlign = Paint.Align.CENTER
@@ -401,6 +406,41 @@ constructor(
             }
         }
 
+        // Cache the selected slice's soft halo on a software canvas. The normal
+        // hardware canvas ignores mask filters; keep the blur outside the slice.
+        private fun drawNeonHalo(canvas: Canvas, slice: String, shape: Path) {
+            val bounds = RectF()
+            shape.computeBounds(bounds, true)
+            if (bounds.isEmpty) return
+            val blur = 10.4f * density // Same blur as notification neon at 60%.
+            val pad = kotlin.math.ceil(blur * 2f).toInt()
+            if (glowBitmap == null || glowSlice != slice || glowBounds != bounds) {
+                val w = kotlin.math.ceil((bounds.width() + pad * 2f) * .5f).toInt().coerceAtLeast(1)
+                val h = kotlin.math.ceil((bounds.height() + pad * 2f) * .5f).toInt().coerceAtLeast(1)
+                val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                Canvas(bitmap).apply {
+                    scale(.5f, .5f)
+                    translate(pad - bounds.left, pad - bounds.top)
+                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = accent
+                        alpha = 99 // 65% halo opacity at 60% intensity.
+                        maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
+                    }
+                    drawPath(shape, paint)
+                }
+                glowBitmap = bitmap
+                glowSlice = slice
+                glowBounds.set(bounds)
+            }
+            canvas.save()
+            canvas.clipOutPath(shape)
+            glowBitmap?.let { bitmap ->
+                canvas.drawBitmap(bitmap, null, RectF(bounds.left - pad, bounds.top - pad,
+                    bounds.right + pad, bounds.bottom + pad), bitmapPaint)
+            }
+            canvas.restore()
+        }
+
         private fun drawRing(canvas: Canvas, list: List<String>, ra: Float, rb: Float,
                 glass: Boolean, classic: Boolean) {
             val sweep = 180f / list.size
@@ -413,15 +453,30 @@ constructor(
                 path.close()
                 val on = slice == selected
                 segPaint.color = when {
+                    on && style == STYLE_NEON -> (accent and 0x00ffffff) or 0x38000000
                     on -> accent
                     glass -> 0x59FFFFFF
                     classic -> 0xE6202020.toInt()
                     else -> 0xE6120A0C.toInt()
                 }
-                if (on && !classic) canvas.drawPath(path, glowPaint)
+                if (on && style == STYLE_NEON) drawNeonHalo(canvas, slice, path)
+                if (on && glass) canvas.drawPath(path, glowPaint)
                 canvas.drawPath(path, segPaint)
-                strokePaint.color = if (glass) 0x80FFFFFF.toInt() else 0x26FFFFFF
-                canvas.drawPath(path, strokePaint)
+                if (on && style == STYLE_NEON) {
+                    canvas.save()
+                    canvas.clipPath(path)
+                    strokePaint.color = accent
+                    for (layer in 5 downTo 1) {
+                        strokePaint.strokeWidth = layer * 2f * density
+                        strokePaint.alpha = if (layer == 1) 138 else 15
+                        canvas.drawPath(path, strokePaint)
+                    }
+                    canvas.restore()
+                    strokePaint.strokeWidth = density
+                } else {
+                    strokePaint.color = if (glass) 0x80FFFFFF.toInt() else 0x26FFFFFF
+                    canvas.drawPath(path, strokePaint)
+                }
                 val mid = Math.toRadians((a0 + (sweep - gap) / 2).toDouble())
                 val rm = (ra + rb) / 2
                 val ix = cx + rm * cos(mid).toFloat()

@@ -83,10 +83,12 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.asAndroidPath
@@ -846,7 +848,10 @@ internal fun neonHaloModifier(
             size.width + padding, size.height + padding)
         val bitmapPaint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
         onDrawBehind {
-            drawIntoCanvas { canvas -> canvas.nativeCanvas.drawBitmap(bitmap, null, destination, bitmapPaint) }
+            // Notification cards keep the soft halo outside their translucent interior.
+            clipPath(path, clipOp = ClipOp.Difference) {
+                drawIntoCanvas { canvas -> canvas.nativeCanvas.drawBitmap(bitmap, null, destination, bitmapPaint) }
+            }
         }
     }
 }
@@ -880,11 +885,13 @@ internal fun neonGlowModifier(
             is Outline.Rectangle -> path.addRect(outline.rect)
             is Outline.Generic -> path.addPath(outline.path)
         }
-        for (layer in 5 downTo 1) {
-            val width = (layer * 2f).dp.toPx()
-            val alpha = strength * if (layer == 1) 0.9f else 0.10f
-            val brush = Brush.horizontalGradient(listOf(first.copy(alpha = alpha), end.copy(alpha = alpha)))
-            drawPath(path = path, brush = brush, style = Stroke(width))
+        clipPath(path) {
+            for (layer in 5 downTo 1) {
+                val width = (layer * 2f).dp.toPx()
+                val alpha = strength * if (layer == 1) 0.9f else 0.10f
+                val brush = Brush.horizontalGradient(listOf(first.copy(alpha = alpha), end.copy(alpha = alpha)))
+                drawPath(path = path, brush = brush, style = Stroke(width))
+            }
         }
     }
 }

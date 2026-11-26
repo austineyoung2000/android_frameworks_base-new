@@ -66,7 +66,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -331,10 +330,10 @@ private fun PowerTileAppearance.haloModifier(shape: RoundedCornerShape): Modifie
 
 private fun PowerTileAppearance.backgroundModifier(shape: RoundedCornerShape): Modifier {
     if (effect == 0) return Modifier.then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
-    val firstColor = if (effect in 5..6) lerp(first, Color.Black, 0.78f).copy(alpha = 1f)
+    val firstColor = if (effect in 5..6) first.copy(alpha = minOf(first.alpha, 0.22f))
         else if (useBlur) first.copy(alpha = minOf(first.alpha, 0.63f)) else first
     val last = if (effect == 2 || effect == 4 || effect == 6) second else first
-    val lastColor = if (effect in 5..6) lerp(last, Color.Black, 0.78f).copy(alpha = 1f)
+    val lastColor = if (effect in 5..6) last.copy(alpha = minOf(last.alpha, 0.22f))
         else if (useBlur) last.copy(alpha = minOf(last.alpha, 0.63f)) else last
     return neonGlowModifier(effect, first, second, glowIntensity, shape)
         .background(Brush.horizontalGradient(listOf(firstColor, lastColor)), shape)

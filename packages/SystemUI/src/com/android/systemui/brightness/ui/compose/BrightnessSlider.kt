@@ -62,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
@@ -208,9 +209,18 @@ fun BrightnessSlider(
             modifier = Modifier
                 .then(if (isVertical) Modifier.fillMaxWidth() else Modifier.fillMaxHeight())
                 .aspectRatio(1f)
-                .brightnessNeon(appearance, false, defaultFill)
+                .brightnessNeon(appearance.copy(style = 0), false, defaultFill)
                 .clip(CircleShape)
-                .background(appearance.fill ?: defaultFill, CircleShape)
+                .background(
+                    if (appearance.effect != 0) {
+                        val first = appearance.fill ?: defaultFill
+                        val second = if (appearance.effect == 2) appearance.end ?: first else first
+                        Brush.horizontalGradient(listOf(
+                            first.copy(alpha = minOf(first.alpha, 0.22f)),
+                            second.copy(alpha = minOf(second.alpha, 0.22f))))
+                    } else {
+                        androidx.compose.ui.graphics.SolidColor(appearance.fill ?: defaultFill)
+                    }, CircleShape)
                 .then(
                     if (enabled) Modifier.clickable {
                         coroutineScope.launch { onIconClick() }
