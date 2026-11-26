@@ -31,6 +31,12 @@ class RisingStacksController @Inject constructor(
         val groups: List<RisingStacksModel.AppGroup> = emptyList(),
         val selected: RisingStacksModel.AppKey? = null,
         val iconPack: String? = null,
+        val iconSize: Int = 30,
+        val effect: Int = 0,
+        val firstColor: Int = 0xffff0055.toInt(),
+        val secondColor: Int = 0xff315bff.toInt(),
+        val outline: Boolean = true,
+        val glowIntensity: Int = 60,
     )
 
     private val mutableState = MutableStateFlow(UiState())
@@ -39,6 +45,12 @@ class RisingStacksController @Inject constructor(
     private var selected: RisingStacksModel.AppKey? = null
     private var allSelectedByUser = false
     private var iconPack: String? = null
+    private var iconSize = 30
+    private var effect = 0
+    private var firstColor = 0xffff0055.toInt()
+    private var secondColor = 0xff315bff.toInt()
+    private var outline = true
+    private var glowIntensity = 60
     private var attached = false
     private var visibleGroups: List<RisingStacksModel.AppGroup> = emptyList()
 
@@ -89,6 +101,19 @@ class RisingStacksController @Inject constructor(
             iconPack = value?.takeIf { it.isNotBlank() }
             publish()
         }, "system:rising_stacks_icon_pack")
+        tunerService.addTunable({ key, value ->
+            when (key) {
+                "system:rising_stacks_icon_size" -> iconSize = (value?.toIntOrNull() ?: 30).coerceIn(24, 60)
+                "system:rising_stacks_effect" -> effect = (value?.toIntOrNull() ?: 0).coerceIn(0, 4)
+                "system:rising_stacks_first_color" -> firstColor = value?.toIntOrNull() ?: 0xffff0055.toInt()
+                "system:rising_stacks_second_color" -> secondColor = value?.toIntOrNull() ?: 0xff315bff.toInt()
+                "system:rising_stacks_outline" -> outline = value?.toIntOrNull()?.let { it != 0 } ?: true
+                "system:rising_stacks_glow_intensity" -> glowIntensity = (value?.toIntOrNull() ?: 60).coerceIn(0, 100)
+            }
+            publish()
+        }, "system:rising_stacks_icon_size", "system:rising_stacks_effect",
+            "system:rising_stacks_first_color", "system:rising_stacks_second_color",
+            "system:rising_stacks_outline", "system:rising_stacks_glow_intensity")
     }
 
     fun select(app: RisingStacksModel.AppKey?) {
@@ -139,7 +164,8 @@ class RisingStacksController @Inject constructor(
     private fun publish() {
         val show = enabled && onLockscreen() &&
             visibleGroups.isNotEmpty()
-        mutableState.value = UiState(show, if (show) visibleGroups else emptyList(), selected, iconPack)
+        mutableState.value = UiState(show, if (show) visibleGroups else emptyList(), selected, iconPack,
+            iconSize, effect, firstColor, secondColor, outline, glowIntensity)
     }
 
     private fun keyFor(entry: NotificationEntry): RisingStacksModel.AppKey =

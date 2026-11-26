@@ -495,6 +495,7 @@ public class NotificationStackScrollLayout
     private boolean mBackwardScrollable;
     private NotificationShelf mShelf;
     private boolean mRisingStacksActive;
+    private int mRisingStacksHeaderHeightPx;
     private String mRisingStacksPackage;
     private int mRisingStacksUserId = UserHandle.USER_NULL;
     private String mMotoCompactPackage;
@@ -6493,8 +6494,19 @@ public class NotificationStackScrollLayout
 
     /** Vertical space reserved for the app selector above lock-screen notification cards. */
     public int getRisingStacksHeaderHeight() {
-        return mRisingStacksActive && isMotoCompactDesignActive()
-                ? Math.round(56f * getResources().getDisplayMetrics().density) : 0;
+        if (!mRisingStacksActive || !isMotoCompactDesignActive()) return 0;
+        return mRisingStacksHeaderHeightPx > 0 ? mRisingStacksHeaderHeightPx
+                : Math.round(56f * getResources().getDisplayMetrics().density);
+    }
+
+    /** Keep the preview viewport and stack algorithm in sync with the selector's size. */
+    public void setRisingStacksHeaderHeight(int heightPx) {
+        int height = Math.max(0, heightPx);
+        if (mRisingStacksHeaderHeightPx == height) return;
+        mRisingStacksHeaderHeightPx = height;
+        requestChildrenUpdate();
+        requestLayout();
+        notifyHeightChangeListener(null, false);
     }
 
     public void setRisingStacksState(boolean active, String packageName, int userId) {

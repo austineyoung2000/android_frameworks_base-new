@@ -111,9 +111,10 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
     fun renderRisingStacks(state: RisingStacksController.UiState) {
         val selector = risingStacksView ?: return
         val wasVisible = selector.visibility == View.VISIBLE
+        val oldHeight = selector.preferredHeightPx
         selector.render(state)
         if (state.visible) selector.bringToFront()
-        if (wasVisible != state.visible) {
+        if (wasVisible != state.visible || oldHeight != selector.preferredHeightPx) {
             lastLayout?.let { values ->
                 updateConstraints(values.position, values.start, values.top, values.end,
                     values.bottom, findViewById<View>(R.id.notification_stack_scroller)?.alpha
@@ -191,7 +192,7 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
             val selector = risingStacksView
             val selectorVisible = selector?.visibility == View.VISIBLE
             val selectorHeight = if (selectorVisible) {
-                (56f * resources.displayMetrics.density + 0.5f).toInt()
+                selector?.preferredHeightPx ?: 0
             } else 0
             connect(nsslId, TOP, PARENT_ID, TOP, marginTop)
             if (selector != null) {

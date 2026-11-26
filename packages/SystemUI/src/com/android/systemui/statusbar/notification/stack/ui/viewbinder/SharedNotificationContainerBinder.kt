@@ -92,6 +92,7 @@ constructor(
                         ) { state, primaryBouncer, alternateBouncer, transitioningBouncer ->
                             state to (primaryBouncer || alternateBouncer || transitioningBouncer)
                         }.collect { (state, bouncerShowing) ->
+                            controller.view.setRisingStacksHeaderHeight(selector.headerHeightPx(state))
                             controller.view.setRisingStacksState(
                                 state.visible,
                                 state.selected?.packageName,
