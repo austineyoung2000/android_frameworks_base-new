@@ -85,6 +85,7 @@ constructor(
     private var zone = ZONE_LOWER
     private var items = DEFAULT_ITEMS
     private var apps = emptyList<String>()
+    private var appsEnabled = true
     private var appIconPack: String? = null
     private val iconPack = RisingStacksIconPack(context)
     private var style = STYLE_CLASSIC
@@ -139,6 +140,7 @@ constructor(
         size = int(KEY_SIZE, 100).coerceIn(60, 150)
         items = Settings.System.getStringForUser(resolver, KEY_ITEMS, UserHandle.USER_CURRENT)
             ?: DEFAULT_ITEMS
+        appsEnabled = int(KEY_APPS_ENABLED, 1) == 1
         apps = (Settings.System.getStringForUser(resolver, KEY_APPS, UserHandle.USER_CURRENT) ?: "")
             .split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(MAX_APPS)
         appIconPack = Settings.System.getStringForUser(resolver, KEY_APP_ICON_PACK, UserHandle.USER_CURRENT)
@@ -211,7 +213,7 @@ constructor(
         val slices = items.split(',').map { it.trim() }.filter { it in ACTIONS }
         if (slices.isEmpty()) return
         val userContext = context.createContextAsUser(UserHandle.CURRENT, 0)
-        val appIcons = apps.mapNotNull { pkg ->
+        val appIcons = (if (appsEnabled) apps else emptyList()).mapNotNull { pkg ->
             try {
                 if (userContext.packageManager.getLaunchIntentForPackage(pkg) == null) null
                 else (iconPack.icon(appIconPack, userContext, pkg)
@@ -446,6 +448,7 @@ constructor(
         /** Comma-separated slices, inner ring first. */
         const val KEY_ITEMS = "pie_items"
         const val KEY_APPS = "pie_apps"
+        const val KEY_APPS_ENABLED = "pie_apps_enabled"
         const val KEY_APP_ICON_PACK = "pie_app_icon_pack"
         private const val APP_PREFIX = "app:"
         private const val MAX_APPS = 6
@@ -458,7 +461,7 @@ constructor(
         const val KEY_EDGE_WIDTH = "pie_edge_width"
         const val KEY_TOLERANCE = "pie_movement_tolerance"
         private val KEYS = arrayOf(KEY_ENABLED, KEY_EDGES, KEY_ZONE, KEY_ITEMS, KEY_STYLE, KEY_CLOCK,
-            KEY_SIZE, KEY_HOLD, KEY_EDGE_WIDTH, KEY_TOLERANCE, KEY_APPS, KEY_APP_ICON_PACK)
+            KEY_SIZE, KEY_HOLD, KEY_EDGE_WIDTH, KEY_TOLERANCE, KEY_APPS, KEY_APP_ICON_PACK, KEY_APPS_ENABLED)
 
         private const val EDGES_LEFT = 0
         private const val EDGES_RIGHT = 1
