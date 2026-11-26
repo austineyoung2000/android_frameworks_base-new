@@ -156,7 +156,7 @@ class AmbientPeekTapView(context: Context) : View(context) {
         val wanted = max(height * 0.38f, anchorBottom + dp(12f)) + jitter
         val rowY = min(wanted, safeBottom - rowHeight - dp(104f))
         // If the sensor or available area leaves no safe space, hide rather than overlap.
-        if (rowY < dp(96f) || rowY < anchorBottom || safeBottom > height
+        if (rowY < dp(96f) || rowY < anchorBottom + dp(8f) || safeBottom > height
             || width < dp(100f)) {
             setReady(false)
             return

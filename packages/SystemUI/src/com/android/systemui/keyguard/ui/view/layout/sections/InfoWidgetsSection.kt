@@ -16,6 +16,8 @@
 package com.android.systemui.keyguard.ui.view.layout.sections
 
 import android.content.Context
+import android.app.ActivityManager
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -27,6 +29,7 @@ import com.android.systemui.res.R
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.lockscreen.ExtraInfoWidgetsController
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
+import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
 import javax.inject.Inject
 import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
@@ -36,6 +39,7 @@ class InfoWidgetsSection
 constructor(
     private val context: Context,
     private val infoWidgetsController: ExtraInfoWidgetsController,
+    private val statusBarStateController: StatusBarStateController,
 ) : KeyguardSection() {
     
     private var infoWidgetsView: View? = null
@@ -84,7 +88,33 @@ constructor(
             val stack = root.findViewById<NotificationStackScrollLayout>(
                 R.id.notification_stack_scroller
             )
-            if (widget.isShown && stack != null && stack.isRisingStacksActive &&
+            val ambientPeek = statusBarStateController.isDozing &&
+                Settings.System.getIntForUser(context.contentResolver, "ambient_peek_enabled", 0,
+                    ActivityManager.getCurrentUser()) != 0
+            if (widget.isShown && ambientPeek) {
+                val location = IntArray(2)
+                val windowLocation = IntArray(2)
+                root.getLocationOnScreen(location)
+                root.getLocationInWindow(windowLocation)
+                val clockWindowBottom = (root.getTag(R.id.ambient_peek_clock_bottom) as? Float) ?: -1f
+                var clockBottom = if (clockWindowBottom > 0f)
+                    (clockWindowBottom + location[1] - windowLocation[1]).toInt() else 0
+                for (id in intArrayOf(R.id.clock_ls, R.id.aod_ls,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE)) {
+                    val clock = root.findViewById<View>(id) ?: continue
+                    if (!clock.isShown || clock.alpha <= 0f || clock.height <= 0 ||
+                        clock.height >= root.height * 0.6f) continue
+                    clock.getLocationOnScreen(rowLocation)
+                    clockBottom = maxOf(clockBottom,
+                        rowLocation[1] + (clock.height * clock.scaleY).toInt())
+                }
+                widget.getLocationOnScreen(widgetLocation)
+                val baseTop = widgetLocation[1] - widget.translationY
+                widget.translationY = if (clockBottom > 0)
+                    (clockBottom + gap - baseTop).coerceAtLeast(0f) else 0f
+                positionAdjustmentApplied = widget.translationY != 0f
+            } else if (widget.isShown && stack != null && stack.isRisingStacksActive &&
                 stack.isMotoCompactDesignActive
             ) {
                 var contentBottom: Int? = null
