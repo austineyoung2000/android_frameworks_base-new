@@ -20,6 +20,8 @@ import android.content.Context;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Canvas;
+import android.graphics.Bitmap;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
@@ -33,6 +35,52 @@ import com.android.systemui.statusbar.notification.stack.NotificationStackScroll
 
 public class FooterViewButton extends AlphaOptimizedButton {
     private int mCardStyle;
+    private int mNeonMode, mNeonFirst, mNeonSecond, mNeonIntensity;
+    private Bitmap mNeonBitmap;
+
+    public void setNeon(int mode, int first, int second, int intensity) {
+        if (mNeonMode == mode && mNeonFirst == first && mNeonSecond == second
+                && mNeonIntensity == intensity) return;
+        mNeonMode = mode; mNeonFirst = first; mNeonSecond = second;
+        mNeonIntensity = intensity; mNeonBitmap = null; invalidate();
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        mNeonBitmap = null;
+    }
+
+    private void drawNeon(Canvas canvas) {
+        if ((mNeonMode != 5 && mNeonMode != 6) || mNeonIntensity <= 0
+                || getWidth() <= 0 || getHeight() <= 0) return;
+        final float density = getResources().getDisplayMetrics().density;
+        final int pad = (int) Math.ceil(24f * density);
+        final int w = getWidth(), h = getHeight();
+        if (mNeonBitmap == null) {
+            mNeonBitmap = Bitmap.createBitmap((w + 2 * pad + 1) / 2,
+                    (h + 2 * pad + 1) / 2, Bitmap.Config.ARGB_8888);
+            Canvas soft = new Canvas(mNeonBitmap);
+            soft.scale(.5f, .5f); soft.translate(pad, pad);
+            Paint halo = new Paint(Paint.ANTI_ALIAS_FLAG);
+            halo.setMaskFilter(new BlurMaskFilter((2f + 10f * mNeonIntensity / 100f)
+                    * density, BlurMaskFilter.Blur.NORMAL));
+            halo.setShader(new LinearGradient(0, 0, w, 0, mNeonFirst,
+                    mNeonMode == 6 ? mNeonSecond : mNeonFirst, Shader.TileMode.CLAMP));
+            halo.setAlpha(130 * mNeonIntensity / 100);
+            soft.drawRoundRect(2f * density, 4f * density, w - 2f * density,
+                    h - 4f * density, 20f * density, 20f * density, halo);
+        }
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        canvas.drawBitmap(mNeonBitmap, null, new RectF(-pad, -pad, w + pad, h + pad), paint);
+        paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2f * density);
+        paint.setShader(new LinearGradient(0, 0, w, 0, mNeonFirst,
+                mNeonMode == 6 ? mNeonSecond : mNeonFirst, Shader.TileMode.CLAMP));
+        paint.setAlpha(225 * mNeonIntensity / 100);
+        canvas.drawRoundRect(2f * density, 5f * density, w - 2f * density,
+                h - 5f * density, 20f * density, 20f * density, paint);
+    }
+
     private final Paint mCardStylePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public void setCardStyle(int style) {
@@ -44,6 +92,7 @@ public class FooterViewButton extends AlphaOptimizedButton {
 
     @Override
     protected void onDraw(Canvas canvas) {
+        drawNeon(canvas);
         if (mCardStyle >= 1 && mCardStyle <= 7) {
             final float density = getResources().getDisplayMetrics().density;
             final RectF rect = new RectF(0f, 4f * density, getWidth(),

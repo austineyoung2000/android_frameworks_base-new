@@ -96,7 +96,8 @@ public class FooterView extends StackScrollerDecorView {
         super.onAttachedToWindow();
         Dependency.get(TunerService.class).addTunable(mCardAppearanceTunable,
                 "system:notification_card_color_mode", "system:notification_card_color_first",
-                "system:notification_card_color_second", "system:notification_card_style");
+                "system:notification_card_color_second", "system:notification_card_style",
+                "system:notification_card_glow_intensity");
     }
 
     @Override
@@ -391,12 +392,23 @@ public class FooterView extends StackScrollerDecorView {
         int cardStyle = Settings.System.getIntForUser(mContext.getContentResolver(),
                 "notification_card_style", 0, UserHandle.USER_CURRENT);
         int buttonContentColor = onSurface;
-        if (colorMode >= 1 && colorMode <= 4) {
+        int neonFirst = Color.MAGENTA;
+        int neonSecond = Color.BLUE;
+        int neonIntensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(
+                mContext.getContentResolver(), "notification_card_glow_intensity", 60,
+                UserHandle.USER_CURRENT)));
+        if (colorMode >= 1 && colorMode <= 6) {
             int first = Settings.System.getIntForUser(mContext.getContentResolver(),
                     "notification_card_color_first", Color.MAGENTA, UserHandle.USER_CURRENT);
-            int second = (colorMode == 2 || colorMode == 4) ? Settings.System.getIntForUser(
+            int second = (colorMode == 2 || colorMode == 4 || colorMode == 6) ? Settings.System.getIntForUser(
                     mContext.getContentResolver(), "notification_card_color_second",
                     Color.BLUE, UserHandle.USER_CURRENT) : first;
+            neonFirst = first;
+            neonSecond = second;
+            if (colorMode >= 5) {
+                first = ColorUtils.setAlphaComponent(first, 56);
+                second = ColorUtils.setAlphaComponent(second, 56);
+            }
             clearAllBg = makeCardBackground(first, second);
             settingsBg = makeCardBackground(first, second);
             historyBg = makeCardBackground(first, second);
@@ -407,14 +419,17 @@ public class FooterView extends StackScrollerDecorView {
         mClearAllButton.setBackground(clearAllBg);
         mClearAllButton.setTextColor(buttonContentColor);
         mClearAllButton.setCardStyle(cardStyle);
+        mClearAllButton.setNeon(colorMode, neonFirst, neonSecond, neonIntensity);
 
         mSettingsButton.setBackground(settingsBg);
         mSettingsButton.setCompoundDrawableTintList(ColorStateList.valueOf(buttonContentColor));
         mSettingsButton.setCardStyle(cardStyle);
+        mSettingsButton.setNeon(colorMode, neonFirst, neonSecond, neonIntensity);
 
         mHistoryButton.setBackground(historyBg);
         mHistoryButton.setCompoundDrawableTintList(ColorStateList.valueOf(buttonContentColor));
         mHistoryButton.setCardStyle(cardStyle);
+        mHistoryButton.setNeon(colorMode, neonFirst, neonSecond, neonIntensity);
 
         mSeenNotifsFooterTextView.setTextColor(onSurface);
         mSeenNotifsFooterTextView.setCompoundDrawableTintList(ColorStateList.valueOf(onSurface));

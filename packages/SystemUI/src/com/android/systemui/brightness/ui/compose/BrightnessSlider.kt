@@ -82,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.lifecycle.DisposableEffectWithLifecycle
 import com.android.compose.ui.graphics.drawInOverlay
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.biometrics.Utils.toBitmap
 import com.android.systemui.brightness.domain.model.GammaBrightness
 import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
@@ -198,11 +199,18 @@ fun BrightnessSlider(
     }
 
     val autoButton = @Composable {
+        val appearance = if (customizeAppearance) rememberBrightnessAppearance() else BrightnessAppearance()
+        val defaultFill = MaterialTheme.colorScheme.primary
+        val tileColors = rememberCustomLabelColors()
+        val iconColor = (if (autoMode) tileColors.activeIcon else tileColors.inactiveIcon)
+            ?: MaterialTheme.colorScheme.onPrimary
         Box(
             modifier = Modifier
                 .then(if (isVertical) Modifier.fillMaxWidth() else Modifier.fillMaxHeight())
                 .aspectRatio(1f)
-                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                .brightnessNeon(appearance, false, defaultFill)
+                .clip(CircleShape)
+                .background(appearance.fill ?: defaultFill, CircleShape)
                 .then(
                     if (enabled) Modifier.clickable {
                         coroutineScope.launch { onIconClick() }
@@ -213,7 +221,7 @@ fun BrightnessSlider(
             Icon(
                 painter = autoBrightnessPainter,
                 contentDescription = stringResource(R.string.accessibility_adaptive_brightness),
-                tint = MaterialTheme.colorScheme.onPrimary,
+                tint = iconColor,
                 modifier = Modifier.size(20.dp),
             )
         }

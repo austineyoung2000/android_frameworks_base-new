@@ -18,6 +18,8 @@ package com.android.systemui.media.ui.compose
 
 import android.content.Context
 import android.content.Intent
+import android.service.quicksettings.Tile.STATE_ACTIVE
+import android.service.quicksettings.Tile.STATE_INACTIVE
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +42,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.media.ui.viewmodel.MiniPlayerViewModel
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonHaloModifier
 
 @Composable
 fun MiniPlayerCompact(
@@ -65,11 +72,14 @@ fun MiniPlayerCompact(
     val iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha)
 
     val shape = RoundedCornerShape(28.dp)
+    val tileSettings = rememberCustomLabelColors()
+    val tileState = if (mediaState.isPlaying) STATE_ACTIVE else STATE_INACTIVE
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .height(height)
+            .then(qsTileNeonHaloModifier(tileSettings, tileState, shape))
             .clickable {
                 if (mediaState.hasActiveMedia && mediaState.packageName != null) {
                     openMediaApp(context, mediaState.packageName!!)
@@ -90,6 +100,9 @@ fun MiniPlayerCompact(
                     color = borderColor,
                     shape = shape
                 )
+                .then(qsTileBackgroundModifier(tileSettings, tileState, shape))
+                .then(qsTileStyleModifier(tileSettings.tileStyle, tileState, shape))
+                .then(qsTileNeonModifier(tileSettings, tileState, shape))
                 .padding(
                     horizontal = 16.dp,
                     vertical = if (compact) 12.dp else 14.dp
