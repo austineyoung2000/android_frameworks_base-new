@@ -48,6 +48,7 @@ import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.res.R
 import com.android.systemui.shared.system.InputChannelCompat
 import com.android.systemui.shared.system.InputMonitorCompat
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksIconPack
 import com.android.systemui.statusbar.policy.FlashlightController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import javax.inject.Inject
@@ -83,6 +84,9 @@ constructor(
     private var edges = EDGES_BOTH
     private var zone = ZONE_LOWER
     private var items = DEFAULT_ITEMS
+    private var apps = emptyList<String>()
+    private var appIconPack: String? = null
+    private val iconPack = RisingStacksIconPack(context)
     private var style = STYLE_CLASSIC
     private var holdDuration = 250L
     private var edgeWidth = 16f
@@ -135,6 +139,9 @@ constructor(
         size = int(KEY_SIZE, 100).coerceIn(60, 150)
         items = Settings.System.getStringForUser(resolver, KEY_ITEMS, UserHandle.USER_CURRENT)
             ?: DEFAULT_ITEMS
+        apps = (Settings.System.getStringForUser(resolver, KEY_APPS, UserHandle.USER_CURRENT) ?: "")
+            .split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(MAX_APPS)
+        appIconPack = Settings.System.getStringForUser(resolver, KEY_APP_ICON_PACK, UserHandle.USER_CURRENT)
         if (enabled && monitor == null) {
             try {
                 val inputMonitor = InputMonitorCompat(TAG, Display.DEFAULT_DISPLAY)
@@ -203,7 +210,17 @@ constructor(
         if (!tracking || !enabled || keyguardStateController.isShowing) return
         val slices = items.split(',').map { it.trim() }.filter { it in ACTIONS }
         if (slices.isEmpty()) return
-        val pie = PieView(windowContext, slices, downX, downY, style, showClock, size / 100f)
+        val userContext = context.createContextAsUser(UserHandle.CURRENT, 0)
+        val appIcons = apps.mapNotNull { pkg ->
+            try {
+                if (userContext.packageManager.getLaunchIntentForPackage(pkg) == null) null
+                else (iconPack.icon(appIconPack, userContext, pkg)
+                    ?: userContext.packageManager.getApplicationIcon(pkg)).let { pkg to it }
+            } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+                null
+            }
+        }.toMap()
+        val pie = PieView(windowContext, slices, appIcons, downX, downY, style, showClock, size / 100f)
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -244,6 +261,15 @@ constructor(
     }
 
     private fun run(slice: String) {
+        if (slice.startsWith(APP_PREFIX)) {
+            val pkg = slice.removePrefix(APP_PREFIX)
+            val userContext = context.createContextAsUser(UserHandle.CURRENT, 0)
+            val intent = userContext.packageManager.getLaunchIntentForPackage(pkg) ?: return
+            activityStarter.postStartActivityDismissingKeyguard(
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), 0
+            )
+            return
+        }
         when (slice) {
             BACK -> key(KeyEvent.KEYCODE_BACK)
             HOME -> key(KeyEvent.KEYCODE_HOME)
@@ -280,6 +306,7 @@ constructor(
     private class PieView(
         context: Context,
         private val slices: List<String>,
+        appIcons: Map<String, Drawable>,
         private val cx: Float,
         private val cy: Float,
         private val style: Int,
@@ -289,10 +316,13 @@ constructor(
         private val density = resources.displayMetrics.density
         private val inner = slices.take(3)
         private val outer = slices.drop(3)
+        private val appSlices = appIcons.keys.map { APP_PREFIX + it }
         private val r0 = 36 * density * scale
         private val r1 = 84 * density * scale
         private val r2 = 88 * density * scale
         private val r3 = 140 * density * scale
+        private val r4 = 144 * density * scale
+        private val r5 = 196 * density * scale
         private val onRight = cx > resources.displayMetrics.widthPixels / 2f
         // The half facing into the screen.
         private val start = if (onRight) 90f else -90f
@@ -320,6 +350,7 @@ constructor(
             for (slice in slices) {
                 context.getDrawable(ICONS.getValue(slice))?.mutate()?.let { icons[slice] = it }
             }
+            appIcons.forEach { (pkg, icon) -> icons[APP_PREFIX + pkg] = icon.mutate() }
         }
 
         fun selectedSlice() = selected
@@ -329,7 +360,8 @@ constructor(
             val angle = norm(Math.toDegrees(atan2((y - cy).toDouble(), (x - cx).toDouble())).toFloat())
             val ring = when {
                 d in r0..r1 -> inner
-                d in r2..r3 * 1.4f -> outer.ifEmpty { inner }
+                d in r2..(if (appSlices.isEmpty()) r3 * 1.4f else r3) -> outer.ifEmpty { inner }
+                appSlices.isNotEmpty() && d in r4..r5 * 1.4f -> appSlices
                 else -> null
             }
             val pick = ring?.let { list ->
@@ -350,9 +382,11 @@ constructor(
             val classic = style == STYLE_CLASSIC
             drawRing(canvas, inner, r0, r1, glass, classic)
             if (outer.isNotEmpty()) drawRing(canvas, outer, r2, r3, glass, classic)
+            if (appSlices.isNotEmpty()) drawRing(canvas, appSlices, r4, r5, glass, classic)
             if (showClock) {
-                val labelX = cx + (if (onRight) -1 else 1) * (r3 * 0.6f)
-                val labelY = cy - r3 - 28 * density
+                val radius = if (appSlices.isEmpty()) r3 else r5
+                val labelX = cx + (if (onRight) -1 else 1) * (radius * 0.6f)
+                val labelY = (cy - radius - 28 * density).coerceAtLeast(30 * density)
                 textPaint.textSize = 30 * density
                 textPaint.alpha = 255
                 canvas.drawText(DateFormat.getTimeFormat(context).format(System.currentTimeMillis()),
@@ -392,7 +426,9 @@ constructor(
                 val iy = cy + rm * sin(mid).toFloat()
                 val half = 12 * density * (if (on) 1.2f else 1f)
                 icons[slice]?.let {
-                    it.setTint(if (glass && !on) 0xFF1B1517.toInt() else Color.WHITE)
+                    if (!slice.startsWith(APP_PREFIX)) {
+                        it.setTint(if (glass && !on) 0xFF1B1517.toInt() else Color.WHITE)
+                    }
                     it.setBounds((ix - half).toInt(), (iy - half).toInt(), (ix + half).toInt(), (iy + half).toInt())
                     it.draw(canvas)
                 }
@@ -409,6 +445,10 @@ constructor(
         const val KEY_ZONE = "pie_zone"
         /** Comma-separated slices, inner ring first. */
         const val KEY_ITEMS = "pie_items"
+        const val KEY_APPS = "pie_apps"
+        const val KEY_APP_ICON_PACK = "pie_app_icon_pack"
+        private const val APP_PREFIX = "app:"
+        private const val MAX_APPS = 6
         /** 0 neon, 1 glass, 2 classic. */
         const val KEY_STYLE = "pie_style"
         const val KEY_CLOCK = "pie_clock"
@@ -418,7 +458,7 @@ constructor(
         const val KEY_EDGE_WIDTH = "pie_edge_width"
         const val KEY_TOLERANCE = "pie_movement_tolerance"
         private val KEYS = arrayOf(KEY_ENABLED, KEY_EDGES, KEY_ZONE, KEY_ITEMS, KEY_STYLE, KEY_CLOCK,
-            KEY_SIZE, KEY_HOLD, KEY_EDGE_WIDTH, KEY_TOLERANCE)
+            KEY_SIZE, KEY_HOLD, KEY_EDGE_WIDTH, KEY_TOLERANCE, KEY_APPS, KEY_APP_ICON_PACK)
 
         private const val EDGES_LEFT = 0
         private const val EDGES_RIGHT = 1
@@ -441,11 +481,11 @@ constructor(
         private const val CAMERA = "camera"
         private const val DEFAULT_ITEMS = "back,home,recents,notifications,flashlight,screenshot,power"
         private val ICONS = mapOf(
-            BACK to R.drawable.rr_pie_back, HOME to R.drawable.rr_pie_home,
-            RECENTS to R.drawable.rr_pie_recents, NOTIFICATIONS to R.drawable.rr_pie_notifications,
-            FLASHLIGHT to R.drawable.rr_ql_flashlight, SCREENSHOT to R.drawable.rr_pie_screenshot,
-            POWER to R.drawable.rr_pie_power, ASSISTANT to R.drawable.rr_pie_assistant,
-            CAMERA to R.drawable.rr_ql_camera,
+            BACK to R.drawable.ic_sysbar_back, HOME to R.drawable.ic_sysbar_home,
+            RECENTS to R.drawable.ic_sysbar_recent, NOTIFICATIONS to R.drawable.ic_notification_bell,
+            FLASHLIGHT to R.drawable.qs_flashlight_icon_on, SCREENSHOT to R.drawable.ic_screen_capture_camera_outline,
+            POWER to R.drawable.ic_qs_footer_power, ASSISTANT to R.drawable.ic_assistant,
+            CAMERA to R.drawable.ic_camera,
         )
         private val ACTIONS = ICONS.keys
     }
