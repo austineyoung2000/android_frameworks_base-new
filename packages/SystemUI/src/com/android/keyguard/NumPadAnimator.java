@@ -203,7 +203,8 @@ class NumPadAnimator {
         expandTextColorAnimator.setInterpolator(Animation.expansionInterpolator);
         expandTextColorAnimator.setDuration(Animation.expansionColorDuration);
         expandTextColorAnimator.addUpdateListener(valueAnimator -> {
-            if (mDigitTextView != null) {
+            if (mDigitTextView != null && !(mAnimatable instanceof NumPadKey
+                    && ((NumPadKey) mAnimatable).hasPinCustomAppearance())) {
                 mDigitTextView.setTextColor((int) valueAnimator.getAnimatedValue());
             }
             if (mImageButton != null) {
@@ -253,7 +254,8 @@ class NumPadAnimator {
         contractTextColorAnimator.setStartDelay(Animation.contractionStartDelay);
         contractTextColorAnimator.setDuration(Animation.contractionDuration);
         contractTextColorAnimator.addUpdateListener(valueAnimator -> {
-            if (mDigitTextView != null) {
+            if (mDigitTextView != null && !(mAnimatable instanceof NumPadKey
+                    && ((NumPadKey) mAnimatable).hasPinCustomAppearance())) {
                 mDigitTextView.setTextColor((int) valueAnimator.getAnimatedValue());
             }
             if (mImageButton != null) {

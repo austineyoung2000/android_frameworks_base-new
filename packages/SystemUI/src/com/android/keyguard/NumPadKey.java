@@ -21,6 +21,14 @@ import static com.android.systemui.Flags.bouncerUiRevamp2;
 
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.res.ColorStateList;
+import android.database.ContentObserver;
+import android.graphics.Canvas;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.UserHandle;
+import android.provider.Settings;
+import android.view.ViewParent;
 import android.content.res.TypedArray;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -53,6 +61,62 @@ public class NumPadKey extends ViewGroup implements NumPadAnimationListener, Num
     private final TextView mDigitText;
     private final TextView mKlondikeText;
     private final PowerManager mPM;
+
+    private final PinKeyAppearance mPinAppearance = new PinKeyAppearance();
+    private ColorStateList mPinOriginalTint;
+    private ColorStateList mPinOriginalDigitColors;
+    private ColorStateList mPinOriginalLetterColors;
+    private boolean mDevicePinKey;
+    private final ContentObserver mPinAppearanceObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+        @Override public void onChange(boolean selfChange) { updatePinAppearance(); }
+    };
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        ViewParent parent = getParent();
+        while (parent instanceof View) {
+            if (parent instanceof KeyguardPINView) { mDevicePinKey = true; break; }
+            parent = parent.getParent();
+        }
+        if (!mDevicePinKey) return;
+        mPinOriginalTint = getBackgroundTintList();
+        mPinOriginalDigitColors = mDigitText.getTextColors();
+        mPinOriginalLetterColors = mKlondikeText.getTextColors();
+        for (String key : PinKeyAppearance.KEYS) {
+            getContext().getContentResolver().registerContentObserver(Settings.System.getUriFor(key),
+                    false, mPinAppearanceObserver, UserHandle.USER_ALL);
+        }
+        updatePinAppearance();
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        if (mDevicePinKey) {
+            getContext().getContentResolver().unregisterContentObserver(mPinAppearanceObserver);
+            setBackgroundTintList(mPinOriginalTint);
+            mDigitText.setTextColor(mPinOriginalDigitColors);
+            mKlondikeText.setTextColor(mPinOriginalLetterColors);
+            mDevicePinKey = false;
+        }
+        super.onDetachedFromWindow();
+    }
+
+    boolean hasPinCustomAppearance() { return mDevicePinKey && mPinAppearance.enabled(); }
+
+    private void updatePinAppearance() {
+        if (!mDevicePinKey) return;
+        mPinAppearance.read(getContext());
+        setBackgroundTintList(mPinAppearance.enabled()
+                ? ColorStateList.valueOf(android.graphics.Color.TRANSPARENT) : mPinOriginalTint);
+        mDigitText.setTextColor(mPinAppearance.enabled() ? ColorStateList.valueOf(mPinAppearance.digitColor()) : mPinOriginalDigitColors);
+        mKlondikeText.setTextColor(mPinAppearance.enabled() ? ColorStateList.valueOf(mPinAppearance.digitColor()) : mPinOriginalLetterColors);
+        invalidate();
+    }
+
+    @Override protected void dispatchDraw(Canvas canvas) {
+        if (mDevicePinKey) mPinAppearance.draw(canvas, getWidth(), getHeight(),
+                getResources().getDisplayMetrics().density, isEnabled());
+        super.dispatchDraw(canvas);
+    }
 
     private int mDigit = -1;
     private int mTextViewResId;
@@ -191,6 +255,7 @@ public class NumPadKey extends ViewGroup implements NumPadAnimationListener, Num
         mKlondikeText.setTextColor(klondikeColor);
 
         if (mAnimator != null) mAnimator.reloadColors(getContext());
+        updatePinAppearance();
     }
 
     @Override
