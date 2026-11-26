@@ -55,30 +55,45 @@ public class FooterViewButton extends AlphaOptimizedButton {
         if ((mNeonMode != 5 && mNeonMode != 6) || mNeonIntensity <= 0
                 || getWidth() <= 0 || getHeight() <= 0) return;
         final float density = getResources().getDisplayMetrics().density;
-        final int pad = (int) Math.ceil(24f * density);
+        final float blur = (2f + 14f * mNeonIntensity / 100f) * density;
+        final int pad = (int) Math.ceil(blur * 2f);
         final int w = getWidth(), h = getHeight();
+        final RectF rect = new RectF(0f, 4f * density, w, h - 4f * density);
+        if (rect.isEmpty()) return;
+        final float radius = Math.min(20f * density, rect.height() / 2f);
+        final Path shape = new Path();
+        shape.addRoundRect(rect, radius, radius, Path.Direction.CW);
         if (mNeonBitmap == null) {
             mNeonBitmap = Bitmap.createBitmap((w + 2 * pad + 1) / 2,
                     (h + 2 * pad + 1) / 2, Bitmap.Config.ARGB_8888);
             Canvas soft = new Canvas(mNeonBitmap);
             soft.scale(.5f, .5f); soft.translate(pad, pad);
             Paint halo = new Paint(Paint.ANTI_ALIAS_FLAG);
-            halo.setMaskFilter(new BlurMaskFilter((2f + 10f * mNeonIntensity / 100f)
-                    * density, BlurMaskFilter.Blur.NORMAL));
+            halo.setMaskFilter(new BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL));
             halo.setShader(new LinearGradient(0, 0, w, 0, mNeonFirst,
                     mNeonMode == 6 ? mNeonSecond : mNeonFirst, Shader.TileMode.CLAMP));
-            halo.setAlpha(130 * mNeonIntensity / 100);
-            soft.drawRoundRect(2f * density, 4f * density, w - 2f * density,
-                    h - 4f * density, 20f * density, 20f * density, halo);
+            halo.setAlpha(mNeonIntensity * 65 * 255 / 10000);
+            soft.drawRoundRect(rect, radius, radius, halo);
         }
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        // Keep the blurred fill outside the shape, just like notification cards.
+        // Drawing it over the interior makes a translucent button look opaque.
+        canvas.save();
+        canvas.clipOutPath(shape);
         canvas.drawBitmap(mNeonBitmap, null, new RectF(-pad, -pad, w + pad, h + pad), paint);
-        paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2f * density);
+        canvas.restore();
+        canvas.save();
+        canvas.clipPath(shape);
+        paint.setStyle(Paint.Style.STROKE);
         paint.setShader(new LinearGradient(0, 0, w, 0, mNeonFirst,
                 mNeonMode == 6 ? mNeonSecond : mNeonFirst, Shader.TileMode.CLAMP));
-        paint.setAlpha(225 * mNeonIntensity / 100);
-        canvas.drawRoundRect(2f * density, 5f * density, w - 2f * density,
-                h - 5f * density, 20f * density, 20f * density, paint);
+        for (int layer = 5; layer >= 1; layer--) {
+            paint.setStrokeWidth(layer * 2f * density);
+            int alpha = 255 * mNeonIntensity / 100;
+            paint.setAlpha(layer == 1 ? alpha * 9 / 10 : alpha / 10);
+            canvas.drawPath(shape, paint);
+        }
+        canvas.restore();
     }
 
     private final Paint mCardStylePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -92,7 +107,6 @@ public class FooterViewButton extends AlphaOptimizedButton {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        drawNeon(canvas);
         if (mCardStyle >= 1 && mCardStyle <= 7) {
             final float density = getResources().getDisplayMetrics().density;
             final RectF rect = new RectF(0f, 4f * density, getWidth(),
@@ -136,6 +150,7 @@ public class FooterViewButton extends AlphaOptimizedButton {
                 canvas.restore();
             }
         }
+        drawNeon(canvas);
         super.onDraw(canvas);
     }
 

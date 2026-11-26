@@ -406,8 +406,8 @@ public class FooterView extends StackScrollerDecorView {
             neonFirst = first;
             neonSecond = second;
             if (colorMode >= 5) {
-                first = ColorUtils.setAlphaComponent(first, 56);
-                second = ColorUtils.setAlphaComponent(second, 56);
+                first = ColorUtils.setAlphaComponent(first, Math.min(Color.alpha(first), 56));
+                second = ColorUtils.setAlphaComponent(second, Math.min(Color.alpha(second), 56));
             }
             clearAllBg = makeCardBackground(first, second);
             settingsBg = makeCardBackground(first, second);
