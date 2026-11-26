@@ -300,8 +300,16 @@ public class NotificationBackgroundView extends View implements Dumpable,
         if (clipTop + clipBottomAmount < getActualHeight() || mExpandAnimationRunning) {
             canvas.save();
             if (!mExpandAnimationRunning) {
-                canvas.clipRect(0, clipTop, getWidth(),
-                        getActualHeight() - clipBottomAmount);
+                // Allow the neon halo outside an unclipped card edge, while still honoring
+                // the stack's clipping when cards overlap or scroll out of view.
+                boolean neon = (mCardColorMode == 5 || mCardColorMode == 6)
+                        && mCardGlowIntensity > 0;
+                int glowPadding = neon ? (int) Math.ceil(32f
+                        * getResources().getDisplayMetrics().density) : 0;
+                canvas.clipRect(-glowPadding, clipTop > 0 ? clipTop : -glowPadding,
+                        getWidth() + glowPadding, clipBottomAmount > 0
+                                ? getActualHeight() - clipBottomAmount
+                                : getActualHeight() + glowPadding);
             }
 
             if (!NotificationAddXOnHoverToDismiss.isEnabled()) {
@@ -381,16 +389,18 @@ public class NotificationBackgroundView extends View implements Dumpable,
         Path path = new Path();
         path.addRoundRect(rect, mCornerRadii, Path.Direction.CW);
         canvas.save();
+        int second = mCardColorMode == 6 ? mCardColorSecond : mCardColorFirst;
+        float density = getResources().getDisplayMetrics().density;
+        // The soft halo must be drawn before the card-shaped clip; only the sharp edge
+        // strokes below should be restricted to the inside of the notification.
+        drawCachedCardGlow(canvas, bounds, density, second);
         canvas.clipPath(path);
         Paint paint = mCardStylePaint;
         paint.reset();
         paint.setAntiAlias(true);
         paint.setStyle(Paint.Style.STROKE);
-        int second = mCardColorMode == 6 ? mCardColorSecond : mCardColorFirst;
         paint.setShader(new LinearGradient(rect.left, rect.top, rect.right, rect.top,
                 mCardColorFirst, second, Shader.TileMode.CLAMP));
-        float density = getResources().getDisplayMetrics().density;
-        drawCachedCardGlow(canvas, bounds, density, second);
         for (int layer = 5; layer >= 1; layer--) {
             paint.setStrokeWidth(layer * 2 * density);
             int alpha = mDrawableAlpha * mCardGlowIntensity / 100;
@@ -422,8 +432,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
             Path localPath = new Path();
             localPath.addRoundRect(new RectF(0, 0, width, height), mCornerRadii, Path.Direction.CW);
             Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
-            glow.setStyle(Paint.Style.STROKE);
-            glow.setStrokeWidth(4f * density);
+            // Match QS: blur a filled rounded shape to produce a soft outer halo.
+            glow.setStyle(Paint.Style.FILL);
             glow.setMaskFilter(new BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL));
             glow.setShader(new LinearGradient(0, 0, Math.max(1, width), 0,
                     mCardColorFirst, second, Shader.TileMode.CLAMP));
