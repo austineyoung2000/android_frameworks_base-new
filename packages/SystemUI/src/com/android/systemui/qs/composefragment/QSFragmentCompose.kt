@@ -247,6 +247,8 @@ import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.FullScreenTilePicker
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQsTileBlurVisible
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonHaloModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonGlowModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalCollapsedRows
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSCompactMode
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalTileDragHandler
@@ -1287,9 +1289,21 @@ constructor(
         val actionColor = actionColors.inactiveBackground ?: actionColors.activeBackground
         val actionEndColor = if (actionColors.inactiveBackground != null)
             actionColors.inactiveGradientEnd else actionColors.activeGradientEnd
+        val useInactiveAction = actionColors.inactiveBackground != null
+        val actionEffect = if (useInactiveAction) actionColors.inactiveEffect else actionColors.activeEffect
+        val actionGlowIntensity = if (useInactiveAction) actionColors.inactiveGlowIntensity
+            else actionColors.activeGlowIntensity
+        val actionNeon = actionColor != null && actionEffect in 5..6
+        val actionShape = RoundedCornerShape(50)
+        val actionHalo = neonHaloModifier(actionEffect, actionColor, actionEndColor,
+            actionGlowIntensity, actionShape)
+        val actionGlow = neonGlowModifier(actionEffect, actionColor, actionEndColor,
+            actionGlowIntensity, actionShape)
         val actionBrush = actionColor?.let { start ->
-            if (actionEndColor != null) Brush.horizontalGradient(listOf(start, actionEndColor))
-            else SolidColor(start)
+            val first = if (actionNeon) start.copy(alpha = minOf(start.alpha, 0.22f)) else start
+            val end = if (actionNeon) actionEndColor?.copy(alpha = minOf(actionEndColor.alpha, 0.22f))
+                else actionEndColor
+            if (end != null) Brush.horizontalGradient(listOf(first, end)) else SolidColor(first)
         }
         val actionIconTint = actionColor?.let { start ->
             val luminance = if (actionEndColor == null) start.luminance()
@@ -1434,6 +1448,9 @@ constructor(
                                             viewModel = viewModel.footerActionsViewModel,
                                             actionButtonBrush = actionBrush,
                                             actionButtonIconColor = actionIconTint,
+                                            actionButtonNeon = actionNeon,
+                                            actionButtonHalo = actionHalo,
+                                            actionButtonGlow = actionGlow,
                                         )
 
                                         val backgroundColor = LocalAndroidColorScheme.current.surfaceEffect1
@@ -1444,11 +1461,13 @@ constructor(
                                             modifier = Modifier
                                                 .padding(horizontal = 4.dp)
                                                 .size(40.dp)
+                                                .then(actionHalo)
                                                 .clip(CircleShape)
                                                 .background(
                                                     actionBrush ?: SolidColor(backgroundColor),
                                                     CircleShape
                                                 )
+                                                .then(actionGlow)
                                                 .clickable(
                                                     interactionSource = remember { MutableInteractionSource() },
                                                     indication = null,

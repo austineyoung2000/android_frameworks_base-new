@@ -123,6 +123,9 @@ fun FooterActions(
     modifier: Modifier = Modifier,
     actionButtonBrush: Brush? = null,
     actionButtonIconColor: Color? = null,
+    actionButtonNeon: Boolean = false,
+    actionButtonHalo: Modifier = Modifier,
+    actionButtonGlow: Modifier = Modifier,
 ) {
     val context = LocalContext.current
 
@@ -189,6 +192,9 @@ fun FooterActions(
                 Modifier.sysuiResTag("settings_button_container"),
                 actionButtonBrush,
                 actionButtonIconColor,
+                actionButtonNeon,
+                actionButtonHalo,
+                actionButtonGlow,
             )
             IconButton(
                 { viewModel.power },
@@ -196,6 +202,9 @@ fun FooterActions(
                 Modifier.sysuiResTag("pm_lite"),
                 actionButtonBrush,
                 actionButtonIconColor,
+                actionButtonNeon,
+                actionButtonHalo,
+                actionButtonGlow,
             )
         }
     }
@@ -240,9 +249,13 @@ private fun IconButton(
     modifier: Modifier = Modifier,
     actionButtonBrush: Brush? = null,
     actionButtonIconColor: Color? = null,
+    actionButtonNeon: Boolean = false,
+    actionButtonHalo: Modifier = Modifier,
+    actionButtonGlow: Modifier = Modifier,
 ) {
     val viewModel = model() ?: return
-    IconButton(viewModel, useModifierBasedExpandable, modifier, actionButtonBrush, actionButtonIconColor)
+    IconButton(viewModel, useModifierBasedExpandable, modifier, actionButtonBrush,
+        actionButtonIconColor, actionButtonNeon, actionButtonHalo, actionButtonGlow)
 }
 
 /** A button with an icon. */
@@ -253,13 +266,16 @@ private fun IconButton(
     modifier: Modifier = Modifier,
     actionButtonBrush: Brush? = null,
     actionButtonIconColor: Color? = null,
+    actionButtonNeon: Boolean = false,
+    actionButtonHalo: Modifier = Modifier,
+    actionButtonGlow: Modifier = Modifier,
 ) {
     val colors = buttonColorsForModel(model)
     CircleExpandable(
-        color = colors.background,
+        color = if (actionButtonNeon) Color.Transparent else colors.background,
         onClick = model.onClick,
         onLongClick = model.onLongClick,
-        modifier = modifier,
+        modifier = modifier.then(actionButtonHalo),
         useModifierBasedImplementation = useModifierBasedExpandable,
     ) {
         if (actionButtonBrush == null) {
@@ -267,7 +283,8 @@ private fun IconButton(
         } else {
             Box(
                 modifier = Modifier.size(FooterActionsDefaults.FooterButtonHeight)
-                    .background(actionButtonBrush, CircleShape),
+                    .background(actionButtonBrush, CircleShape)
+                    .then(actionButtonGlow),
                 contentAlignment = Alignment.Center,
             ) {
                 FooterIcon(model.icon, Modifier.size(20.dp), actionButtonIconColor ?: colors.icon)
