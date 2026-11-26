@@ -340,6 +340,17 @@ private fun PowerTileAppearance.backgroundModifier(shape: RoundedCornerShape): M
         .then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
 }
 
+/** A restrained panel tint keeps the actions readable while following the chosen palette. */
+private fun PowerTileAppearance.panelBackgroundModifier(shape: RoundedCornerShape): Modifier {
+    if (effect == 0) return Modifier
+    val last = if (effect == 2 || effect == 4 || effect == 6) second else first
+    val colors = listOf(first.copy(alpha = minOf(first.alpha, 0.22f)),
+            last.copy(alpha = minOf(last.alpha, 0.22f)))
+    return neonGlowModifier(effect, first, second, glowIntensity, shape)
+        .background(Brush.horizontalGradient(colors), shape)
+        .then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
+}
+
 private fun PowerTileAppearance.contentColor(native: Color): Color {
     if (effect == 0) return native
     if (effect in 5..6) return Color.White
@@ -705,18 +716,21 @@ private fun RestartChoiceMenu(
     onOptionSelected: (GlobalActionsDialogLite.Action) -> Unit,
     onBack: () -> Unit
 ) {
+    val appearance = rememberPowerTileAppearance()
+    val panelShape = RoundedCornerShape(32.dp)
     Surface(
         modifier = Modifier
             .width(340.dp)
             .padding(16.dp)
+            .then(appearance.haloModifier(panelShape))
             .pointerInput(Unit) { detectTapGestures { } },
-        shape = RoundedCornerShape(32.dp),
-        color = MaterialTheme.colorScheme.surface,
+        shape = panelShape,
+        color = if (appearance.effect == 0) MaterialTheme.colorScheme.surface else Color.Transparent,
         tonalElevation = 6.dp,
         shadowElevation = 8.dp
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.then(appearance.panelBackgroundModifier(panelShape)).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -827,6 +841,8 @@ private fun PowerMenuContainer(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val gridColumns = 4
+    val appearance = rememberPowerTileAppearance()
+    val panelShape = RoundedCornerShape(32.dp)
 
     if (isLandscape) {
         Box(
@@ -845,15 +861,16 @@ private fun PowerMenuContainer(
                     .width(340.dp)
                     .align(BiasAlignment(0f, animatedBias))
                     .padding(top = topPadding, start = 16.dp, end = 16.dp)
+                    .then(appearance.haloModifier(panelShape))
                     .pointerInput(Unit) { detectTapGestures { } }
                     .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessLow)),
-                shape = RoundedCornerShape(32.dp),
-                color = MaterialTheme.colorScheme.surface,
+                shape = panelShape,
+                color = if (appearance.effect == 0) MaterialTheme.colorScheme.surface else Color.Transparent,
                 tonalElevation = 6.dp,
                 shadowElevation = 8.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.then(appearance.panelBackgroundModifier(panelShape)).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     MenuHeader(isEditMode, onToggleEdit)
@@ -923,15 +940,16 @@ private fun PowerMenuContainer(
             modifier = Modifier
                 .width(340.dp)
                 .padding(16.dp)
+                .then(appearance.haloModifier(panelShape))
                 .pointerInput(Unit) { detectTapGestures { } }
                 .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessLow)),
-            shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface,
+            shape = panelShape,
+            color = if (appearance.effect == 0) MaterialTheme.colorScheme.surface else Color.Transparent,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.then(appearance.panelBackgroundModifier(panelShape)).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 MenuHeader(isEditMode, onToggleEdit)
