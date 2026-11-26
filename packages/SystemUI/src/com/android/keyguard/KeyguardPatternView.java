@@ -24,6 +24,11 @@ import static com.android.systemui.statusbar.policy.DevicePostureController.DEVI
 
 import android.annotation.Nullable;
 import android.content.Context;
+import android.database.ContentObserver;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.SystemClock;
@@ -50,6 +55,30 @@ import com.android.systemui.statusbar.policy.DevicePostureController.DevicePostu
 
 public class KeyguardPatternView extends KeyguardInputView
         implements AppearAnimationCreator<LockPatternView.CellState> {
+
+    private static final String[] PATTERN_APPEARANCE_KEYS = {
+            "rising_pattern_effect", "rising_pattern_style", "rising_pattern_first_color",
+            "rising_pattern_second_color", "rising_pattern_glow_intensity"};
+    private final ContentObserver mPatternAppearanceObserver = new ContentObserver(
+            new Handler(Looper.getMainLooper())) {
+        @Override public void onChange(boolean selfChange) { updatePatternAppearance(); }
+    };
+
+    @Override protected void onDetachedFromWindow() {
+        getContext().getContentResolver().unregisterContentObserver(mPatternAppearanceObserver);
+        super.onDetachedFromWindow();
+    }
+
+    private void updatePatternAppearance() {
+        if (mLockPatternView == null) return;
+        var r = getContext().getContentResolver();
+        int effect = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[0], 0, UserHandle.USER_CURRENT);
+        int style = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[1], 0, UserHandle.USER_CURRENT);
+        int first = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[2], 0xff6200ee, UserHandle.USER_CURRENT);
+        int second = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[3], 0xff0000ff, UserHandle.USER_CURRENT);
+        int intensity = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[4], 60, UserHandle.USER_CURRENT);
+        mLockPatternView.setRisingPatternAppearance(effect, style, first, second, intensity);
+    }
 
     private static final String TAG = "SecurityPatternView";
     private static final boolean DEBUG = KeyguardConstants.DEBUG;
@@ -248,6 +277,11 @@ public class KeyguardPatternView extends KeyguardInputView
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         mSecurityMessageDisplay = findViewById(R.id.bouncer_message_area);
+        for (String key : PATTERN_APPEARANCE_KEYS) {
+            getContext().getContentResolver().registerContentObserver(Settings.System.getUriFor(key),
+                    false, mPatternAppearanceObserver, UserHandle.USER_ALL);
+        }
+        updatePatternAppearance();
     }
 
     @Override

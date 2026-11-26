@@ -112,6 +112,15 @@ public class LockPatternView extends View {
     @UnsupportedAppUsage
     private final Paint mPathPaint = new Paint();
 
+    // Optional SystemUI credential appearance. Native is the default for all other callers.
+    private int mRisingPatternEffect;
+    private int mRisingPatternStyle;
+    private int mRisingPatternFirst = 0xff6200ee;
+    private int mRisingPatternSecond = 0xff0000ff;
+    private int mRisingPatternIntensity = 60;
+    private final Paint mRisingPatternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+
     /**
      * How many milliseconds we spend animating each circle of a lock pattern
      * if the animating mode is set.  The entire animation should take this
@@ -1874,6 +1883,51 @@ public class LockPatternView extends View {
         invalidate();
     }
 
+    /** Set optional visual treatment for the SystemUI credential pattern. @hide */
+    public void setRisingPatternAppearance(int effect, int style, int first, int second,
+            int intensity) {
+        mRisingPatternEffect = Math.max(0, Math.min(4, effect));
+        mRisingPatternStyle = Math.max(0, Math.min(7, style));
+        mRisingPatternFirst = first;
+        mRisingPatternSecond = second;
+        mRisingPatternIntensity = Math.max(0, Math.min(100, intensity));
+        invalidate();
+    }
+
+    private boolean useRisingPattern() {
+        // Never reveal path selection in stealth mode or replace the native error state.
+        return mRisingPatternEffect != 0 && !mInStealthMode
+                && mPatternDisplayMode != DisplayMode.Wrong;
+    }
+
+    private void drawRisingLine(Canvas canvas, float startX, float startY, float endX,
+            float endY, float alpha) {
+        if (!useRisingPattern() || alpha <= 0f) return;
+        Paint paint = mRisingPatternPaint;
+        paint.reset();
+        paint.setAntiAlias(true);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        int end = (mRisingPatternEffect == 2 || mRisingPatternEffect == 4)
+                ? mRisingPatternSecond : mRisingPatternFirst;
+        paint.setShader(new LinearGradient(0f, 0f, Math.max(1, getWidth()), 0f,
+                mRisingPatternFirst, end, Shader.TileMode.CLAMP));
+        float density = getResources().getDisplayMetrics().density;
+        if (mRisingPatternEffect == 3 || mRisingPatternEffect == 4) {
+            for (int layer = 5; layer >= 1; layer--) {
+                paint.setStrokeWidth(mPathWidth + layer * 2f * density);
+                int strength = Math.round(255f * alpha * mRisingPatternIntensity / 100f);
+                paint.setAlpha(layer == 1 ? strength * 9 / 10 : strength / 10);
+                canvas.drawLine(startX, startY, endX, endY, paint);
+            }
+        } else {
+            paint.setStrokeWidth(mPathWidth);
+            paint.setAlpha(Math.round(alpha * 255f));
+            canvas.drawLine(startX, startY, endX, endY, paint);
+        }
+        paint.setShader(null);
+    }
+
     /**
      * Keeps dot activated until the next dot gets activated.
      */
@@ -1965,7 +2019,8 @@ public class LockPatternView extends View {
                 || drawWrongPath;
 
         if (drawPath && !mFadeClear) {
-            mPathPaint.setColor(getCurrentColor(true /* partOfPattern */));
+            mPathPaint.setColor(useRisingPattern() ? mRisingPatternFirst
+                    : getCurrentColor(true /* partOfPattern */));
 
             boolean anyCircles = false;
             float lastX = 0f;
@@ -2034,6 +2089,8 @@ public class LockPatternView extends View {
                 mPathPaint.setAlpha((int) (calculateLastSegmentAlpha(
                         mInProgressX, mInProgressY, lastX, lastY) * 255f));
                 canvas.drawPath(currentPath, mPathPaint);
+                drawRisingLine(canvas, lastX, lastY, mInProgressX, mInProgressY,
+                        calculateLastSegmentAlpha(mInProgressX, mInProgressY, lastX, lastY));
             }
         }
 
@@ -2061,7 +2118,9 @@ public class LockPatternView extends View {
                         canvas.drawCircle(centerX, centerY, radius, mFocusPaint);
                     }
 
-                    if (mUseLockPatternDrawable) {
+                    if (mUseLockPatternDrawable && (mInStealthMode
+                            || mPatternDisplayMode == DisplayMode.Wrong
+                            || (mRisingPatternEffect == 0 && mRisingPatternStyle == 0))) {
                         drawCellDrawable(canvas, i, j, cellState.radius, drawLookup[i][j]);
                     } else {
                         if (isHardwareAccelerated() && cellState.hwAnimating) {
@@ -2100,9 +2159,11 @@ public class LockPatternView extends View {
                     ((float) (elapsedRealtime - lineFadeStart - mLineFadeOutAnimationDelayMs))
                             / mLineFadeOutAnimationDurationMs, 0f);
             drawFadingAwayLineSegment(canvas, startX, startY, endX, endY, fadeAwayProgress);
+            drawRisingLine(canvas, startX, startY, endX, endY, 1f - fadeAwayProgress);
         } else {
             mPathPaint.setAlpha(255);
             canvas.drawLine(startX, startY, endX, endY, mPathPaint);
+            drawRisingLine(canvas, startX, startY, endX, endY, 1f);
         }
     }
 
@@ -2194,8 +2255,39 @@ public class LockPatternView extends View {
         } else {
             mPaint.setColor(getDotColor());
         }
+        if (useRisingPattern()) {
+            int end = (mRisingPatternEffect == 2 || mRisingPatternEffect == 4)
+                    ? mRisingPatternSecond : mRisingPatternFirst;
+            mPaint.setColor(mRisingPatternFirst);
+            mPaint.setShader(new LinearGradient(centerX - radius, centerY,
+                    centerX + Math.max(radius, 1f), centerY, mRisingPatternFirst, end,
+                    Shader.TileMode.CLAMP));
+        }
         mPaint.setAlpha((int) (alpha * 255));
         canvas.drawCircle(centerX, centerY, radius, mPaint);
+        mPaint.setShader(null);
+        if (!mInStealthMode && mPatternDisplayMode != DisplayMode.Wrong
+                && (mRisingPatternStyle != 0 || useRisingPattern()
+                && (mRisingPatternEffect == 3 || mRisingPatternEffect == 4))) {
+            Paint edge = mRisingPatternPaint;
+            edge.reset(); edge.setAntiAlias(true); edge.setStyle(Paint.Style.STROKE);
+            edge.setColor(useRisingPattern() ? mRisingPatternFirst : mDotColor);
+            float density = getResources().getDisplayMetrics().density;
+            int layers = useRisingPattern() && (mRisingPatternEffect == 3 || mRisingPatternEffect == 4) ? 5 : 1;
+            if (useRisingPattern() && mRisingPatternEffect == 4) {
+                edge.setShader(new LinearGradient(centerX - radius, centerY,
+                        centerX + Math.max(radius, 1f), centerY, mRisingPatternFirst,
+                        mRisingPatternSecond, Shader.TileMode.CLAMP));
+            }
+            for (int layer = layers; layer >= 1; layer--) {
+                edge.setStrokeWidth(layer * density);
+                int a = Math.round(alpha * 255f * (layers == 1 ? 0.65f :
+                        mRisingPatternIntensity / 100f * (layer == 1 ? 0.9f : 0.1f)));
+                edge.setAlpha(a);
+                canvas.drawCircle(centerX, centerY, radius, edge);
+            }
+            edge.setShader(null);
+        }
     }
 
     /**
