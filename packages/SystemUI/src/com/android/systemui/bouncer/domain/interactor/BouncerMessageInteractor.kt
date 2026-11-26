@@ -434,6 +434,16 @@ constructor(
                     isSecureLockDeviceEnabled(),
                 )
                 .toMessage()
+                .let { message ->
+                    if (currentSecurityMode == SecurityMode.KnockCode) {
+                        message.copy(message = Message(
+                            messageResId = R.string.kg_knock_code_instructions,
+                            animate = false,
+                        ))
+                    } else {
+                        message
+                    }
+                }
 
     private val isClass3FaceAuthEnrolledAndEnabled: Boolean
         get() = secureLockDeviceInteractor.get().hasFace.value
