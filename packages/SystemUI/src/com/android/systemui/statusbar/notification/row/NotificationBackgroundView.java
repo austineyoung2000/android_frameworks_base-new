@@ -787,7 +787,12 @@ public class NotificationBackgroundView extends View implements Dumpable,
             int first = mCardColorFirst;
             int second = (mCardColorMode == 2 || mCardColorMode == 4 || mCardColorMode == 6)
                     ? mCardColorSecond : mCardColorFirst;
-            if (customCardBlurAvailable()) {
+            if (mCardColorMode == 5 || mCardColorMode == 6) {
+                // Use the same restrained neon tint as QS; the cached halo and selected
+                // card style provide the glow and outline over this surface.
+                first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), 56) << 24);
+                second = (second & 0x00ffffff) | (Math.min(Color.alpha(second), 56) << 24);
+            } else if (customCardBlurAvailable()) {
                 first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), 160) << 24);
                 second = (second & 0x00ffffff) | (Math.min(Color.alpha(second), 160) << 24);
             }
