@@ -470,7 +470,7 @@ fun StatusBarPopup(
         ) {
             Box(
                 modifier =
-                    Modifier.padding(8.dp)
+                    Modifier.padding(if (colorMode in 3..4) 32.dp else 8.dp)
                         .wrapContentSize()
                         .onGloballyPositioned { coordinates ->
                             popupBoundsInScreen = coordinates.boundsInScreen(popupView)

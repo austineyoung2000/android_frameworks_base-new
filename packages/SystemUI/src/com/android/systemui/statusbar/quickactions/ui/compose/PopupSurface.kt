@@ -22,6 +22,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -46,7 +48,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.axion.blur.AxBlurBackgroundRenderer
 import com.android.axion.blur.AxBlurColors
 import com.android.systemui.statusbar.quickactions.popups.shared.DynamicIslandFeatureSettings.POPUP_COLOR_MODE_BLUR
-import com.android.systemui.statusbar.quickactions.popups.shared.DynamicIslandFeatureSettings.POPUP_COLOR_MODE_SOLID_BLACK
 import com.android.systemui.statusbar.quickactions.popups.shared.DynamicIslandFeatureSettings.observeDynamicIslandPopupColorMode
 import com.android.systemui.statusbar.quickactions.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandPopupColorMode
 
@@ -109,6 +110,10 @@ fun PopupSurface(
     animateContentAsUnit: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    val appearance = rememberDynamicPopupAppearance("status_bar_dynamic_island")
+    val endColor = if (appearance.dualColor) appearance.second else appearance.first
+    val customContentColor = if (appearance.mode == 2 &&
+        (appearance.first.luminance() + endColor.luminance()) / 2f > .5f) Color.Black else Color.White
     val islandMotion = LocalIslandPopupRevealMillis.current != null
     val surfaceShape = if (islandMotion) RoundedCornerShape(DynamicIslandMotion.CardCornerRadius) else shape
     val animatedContent: @Composable () -> Unit = {
@@ -117,19 +122,31 @@ fun PopupSurface(
         } else content()
     }
     if (LocalIslandPopupContentOnly.current) {
-        val contentColor = if (colorMode == POPUP_COLOR_MODE_SOLID_BLACK) Color.White
+        val contentColor = if (colorMode in 2..4) customContentColor
             else MaterialTheme.colorScheme.onSurface
         CompositionLocalProvider(LocalContentColor provides contentColor) {
             Box(modifier, propagateMinConstraints = true) { animatedContent() }
         }
         return
     }
+    if (colorMode in 2..4) {
+        val rounded = surfaceShape as? RoundedCornerShape
+            ?: RoundedCornerShape(DynamicIslandMotion.CardCornerRadius)
+        DynamicPopupSurface(appearance = appearance, shape = rounded, modifier = modifier) {
+            CompositionLocalProvider(LocalContentColor provides customContentColor) {
+                animatedContent()
+            }
+        }
+        return
+    }
+    val outlinedModifier = if (appearance.outline) modifier.border(1.dp,
+        MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), surfaceShape) else modifier
     when (colorMode) {
         POPUP_COLOR_MODE_BLUR -> {
             val density = LocalDensity.current
             Box(
                 modifier =
-                    modifier
+                    outlinedModifier
                         .clip(surfaceShape)
                         .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
             ) {
@@ -155,24 +172,13 @@ fun PopupSurface(
                 }
             }
         }
-        POPUP_COLOR_MODE_SOLID_BLACK -> {
-            Surface(
-                color = Color.Black,
-                contentColor = Color.White,
-                shape = surfaceShape,
-                shadowElevation = shadowElevation,
-                modifier = modifier,
-            ) {
-                animatedContent()
-            }
-        }
         else -> {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = MaterialTheme.colorScheme.onSurface,
                 shape = surfaceShape,
                 shadowElevation = shadowElevation,
-                modifier = modifier,
+                modifier = outlinedModifier,
             ) {
                 animatedContent()
             }

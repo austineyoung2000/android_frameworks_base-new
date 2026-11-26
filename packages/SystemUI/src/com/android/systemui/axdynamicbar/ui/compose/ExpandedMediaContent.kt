@@ -42,6 +42,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.android.systemui.statusbar.quickactions.ui.compose.DynamicPopupSurface
+import com.android.systemui.statusbar.quickactions.ui.compose.rememberDynamicPopupAppearance
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
@@ -61,11 +63,16 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
     val colors = rememberMediaColors(event)
     val accent = colors.accent
 
-    Box(
-        modifier =
-            Modifier.fillMaxWidth().clip(ShapeCard).border(1.dp, CardBorderBrush, ShapeCard)
+    val appearance = rememberDynamicPopupAppearance("ax_dynamic_bar")
+    DynamicPopupSurface(
+        appearance = appearance,
+        shape = ShapeCard,
+        modifier = Modifier.fillMaxWidth(),
+        nativeBackground = {
+            AxBlurBackdrop(RadiusCard, CardBg, Modifier.matchParentSize())
+            Box(Modifier.matchParentSize().border(1.dp, CardBorderBrush, ShapeCard))
+        },
     ) {
-        AxBlurBackdrop(RadiusCard, CardBg, Modifier.matchParentSize())
         Row(
             modifier =
                 Modifier.fillMaxWidth()

@@ -150,7 +150,8 @@ internal fun IslandPopupMorph(
 ) {
     val density = LocalDensity.current
     val view = LocalView.current
-    val margin = with(density) { 12.dp.roundToPx() }
+    val popupMode = rememberPopupColorMode()
+    val margin = with(density) { (if (popupMode in 3..4) 32.dp else 12.dp).roundToPx() }
     val gap = with(density) { 8.dp.toPx() }
     val cornerRadius = with(density) { DynamicIslandMotion.CardCornerRadius.toPx() }
     val returnDistance = with(density) { 4.dp.toPx() }

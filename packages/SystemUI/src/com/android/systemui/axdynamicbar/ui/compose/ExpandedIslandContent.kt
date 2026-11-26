@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.android.systemui.statusbar.quickactions.ui.compose.DynamicPopupSurface
+import com.android.systemui.statusbar.quickactions.ui.compose.rememberDynamicPopupAppearance
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import kotlinx.coroutines.delay
@@ -104,13 +106,18 @@ fun ExpandedIslandContent(
 
     val expandedGroups = remember(expandedFilter) { mutableStateMapOf<String, Boolean>() }
 
+    val popupAppearance = rememberDynamicPopupAppearance("ax_dynamic_bar")
+    val neonPadding = popupAppearance.mode in 3..4
     LazyColumn(
         modifier =
             Modifier.widthIn(max = ExpandedMaxWidth)
                 .wrapContentHeight(),
-        verticalArrangement = Arrangement.spacedBy(SpaceMd),
-        contentPadding =
-            PaddingValues(start = SpaceLg, end = SpaceLg, top = SpaceXxs, bottom = EXPANDED_BOTTOM_PAD),
+        verticalArrangement = Arrangement.spacedBy(if (neonPadding) 32.dp else SpaceMd),
+        contentPadding = PaddingValues(
+            start = if (neonPadding) 32.dp else SpaceLg,
+            end = if (neonPadding) 32.dp else SpaceLg,
+            top = if (neonPadding) 32.dp else SpaceXxs,
+            bottom = EXPANDED_BOTTOM_PAD),
     ) {
         if (isNotificationFilter && notifGroups.isNotEmpty()) {
             notifGroups.forEach { group ->
@@ -230,13 +237,16 @@ internal fun BiometricUnlockExpanded(event: IslandEvent.BiometricUnlock) {
 
 @Composable
 internal fun PrimaryCard(content: @Composable () -> Unit) {
-    Box(
-        modifier =
-            Modifier.fillMaxWidth()
-                .clip(ShapeCard)
-                .border(1.dp, CardBorderBrush, ShapeCard)
+    val appearance = rememberDynamicPopupAppearance("ax_dynamic_bar")
+    DynamicPopupSurface(
+        appearance = appearance,
+        shape = ShapeCard,
+        modifier = Modifier.fillMaxWidth(),
+        nativeBackground = {
+            AxBlurBackdrop(RadiusCard, CardBg, Modifier.matchParentSize())
+            Box(Modifier.matchParentSize().border(1.dp, CardBorderBrush, ShapeCard))
+        },
     ) {
-        AxBlurBackdrop(RadiusCard, CardBg, Modifier.matchParentSize())
         Box(modifier = Modifier.padding(SpaceXxl)) { content() }
     }
 }
