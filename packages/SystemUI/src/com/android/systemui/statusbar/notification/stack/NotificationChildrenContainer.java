@@ -57,6 +57,7 @@ import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.row.ExpandableView;
 import com.android.systemui.statusbar.notification.row.HybridGroupManager;
 import com.android.systemui.statusbar.notification.row.HybridNotificationView;
+import com.android.systemui.statusbar.notification.row.NotificationBackgroundView;
 import com.android.systemui.statusbar.notification.row.ui.viewmodel.BundleHeaderViewModel;
 import com.android.systemui.statusbar.notification.row.wrapper.BundleHeaderViewWrapper;
 import com.android.systemui.statusbar.notification.row.wrapper.NotificationHeaderViewWrapper;
@@ -133,6 +134,8 @@ public class NotificationChildrenContainer extends ViewGroup
     private boolean mBundleHeaderBlurEnabled;
 
     private NotificationHeaderView mGroupHeader;
+    private final NotificationBackgroundView mThemedGroupHeader;
+    private boolean mSeparateGroupHeaderBackground;
     private NotificationHeaderViewWrapper mGroupHeaderWrapper;
     private NotificationHeaderView mMinimizedGroupHeader;
     private NotificationHeaderViewWrapper mMinimizedGroupHeaderWrapper;
@@ -180,6 +183,14 @@ public class NotificationChildrenContainer extends ViewGroup
         super(context, attrs, defStyleAttr, defStyleRes);
         mHybridGroupManager = new HybridGroupManager(getContext());
         mRoundableState = new RoundableState(this, this, 0f);
+        mThemedGroupHeader = new NotificationBackgroundView(context, null);
+        mThemedGroupHeader.setCustomBackground(R.drawable.notification_material_bg);
+        mThemedGroupHeader.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        mThemedGroupHeader.setCardAppearanceChangedListener(() -> {
+            updateHeaderForExpansion(mSeparateGroupHeaderBackground);
+            invalidate();
+        });
+        addView(mThemedGroupHeader);
         initDimens();
         setClipChildren(false);
     }
@@ -247,6 +258,9 @@ public class NotificationChildrenContainer extends ViewGroup
         if (mGroupHeader != null) {
             mGroupHeader.layout(0, 0, mGroupHeader.getMeasuredWidth(),
                     mGroupHeader.getMeasuredHeight());
+            mThemedGroupHeader.layout(0, 0, mGroupHeader.getMeasuredWidth(),
+                    mGroupHeader.getMeasuredHeight());
+            mThemedGroupHeader.setActualHeight(mGroupHeader.getMeasuredHeight());
         }
         if (mMinimizedGroupHeader != null) {
             mMinimizedGroupHeader.layout(0, 0,
@@ -306,6 +320,7 @@ public class NotificationChildrenContainer extends ViewGroup
         int headerHeightSpec = MeasureSpec.makeMeasureSpec(getHeaderHeight(), MeasureSpec.EXACTLY);
         if (mGroupHeader != null) {
             mGroupHeader.measure(widthMeasureSpec, headerHeightSpec);
+            mThemedGroupHeader.measure(widthMeasureSpec, headerHeightSpec);
         }
         if (mMinimizedGroupHeader != null) {
             mMinimizedGroupHeader.measure(widthMeasureSpec, headerHeightSpec);
@@ -1145,6 +1160,25 @@ public class NotificationChildrenContainer extends ViewGroup
 
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+        // This view is drawn immediately behind the matching header, not in its normal
+        // child-order position, so it follows header transitions and does not cover text.
+        if (child == mThemedGroupHeader) return false;
+        if (child == mGroupHeader && mSeparateGroupHeaderBackground
+                && mThemedGroupHeader.hasCustomCardAppearance()) {
+            mThemedGroupHeader.setTranslationX(child.getTranslationX());
+            mThemedGroupHeader.setTranslationY(child.getTranslationY());
+            mThemedGroupHeader.setScaleX(child.getScaleX());
+            mThemedGroupHeader.setScaleY(child.getScaleY());
+            mThemedGroupHeader.setAlpha(child.getAlpha());
+            if (mGroupHeaderWrapper != null) {
+                float[] radii = mGroupHeaderWrapper.getUpdatedRadii();
+                mThemedGroupHeader.setRadius(radii[0], radii[4]);
+            }
+            int saveCount = canvas.save();
+            if (mChildClipPath != null) canvas.clipPath(mChildClipPath);
+            super.drawChild(canvas, mThemedGroupHeader, drawingTime);
+            canvas.restoreToCount(saveCount);
+        }
         boolean isCanvasChanged = false;
 
         Path clipPath = mChildClipPath;
@@ -1448,8 +1482,12 @@ public class NotificationChildrenContainer extends ViewGroup
      * @param expanded whether the group is expanded.
      */
     public void updateHeaderForExpansion(boolean expanded) {
+        mSeparateGroupHeaderBackground = expanded;
         if (mGroupHeader != null) {
-            if (expanded) {
+            if (expanded && mThemedGroupHeader.hasCustomCardAppearance()) {
+                mThemedGroupHeader.setTint(mContainingNotification.calculateBgColor());
+                mGroupHeader.setHeaderBackgroundDrawable(null);
+            } else if (expanded) {
                 ColorDrawable cd = new ColorDrawable();
                 cd.setColor(mContainingNotification.calculateBgColor());
                 mGroupHeader.setHeaderBackgroundDrawable(cd);

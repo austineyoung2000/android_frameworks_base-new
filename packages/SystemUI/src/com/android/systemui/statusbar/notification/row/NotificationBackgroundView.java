@@ -134,6 +134,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private int mCardColorFirst = Color.MAGENTA;
     private int mCardColorSecond = Color.BLUE;
     private int mCardStyle;
+    @Nullable private Runnable mCardAppearanceChangedListener;
     private boolean mHadCustomCardColor;
     private final Paint mCardStylePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TunerService.Tunable mCardAppearanceTunable = (key, value) ->
@@ -157,6 +158,16 @@ public class NotificationBackgroundView extends View implements Dumpable,
         }
         updateCardBlur();
         invalidate();
+        if (mCardAppearanceChangedListener != null) mCardAppearanceChangedListener.run();
+    }
+
+    /** Whether the user chose a non-native notification color or style. */
+    public boolean hasCustomCardAppearance() {
+        return mCardColorMode != 0 || mCardStyle != 0;
+    }
+
+    public void setCardAppearanceChangedListener(@Nullable Runnable listener) {
+        mCardAppearanceChangedListener = listener;
     }
 
     int getGlowPadding() {
