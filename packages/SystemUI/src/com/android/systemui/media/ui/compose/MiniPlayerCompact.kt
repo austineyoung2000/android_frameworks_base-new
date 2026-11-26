@@ -71,8 +71,15 @@ fun MiniPlayerCompact(
     val textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha)
     val iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha)
 
-    val shape = RoundedCornerShape(28.dp)
     val tileSettings = rememberCustomLabelColors()
+    val shape = when (tileSettings.tileShape) {
+        1 -> RoundedCornerShape(0.dp)
+        2 -> RoundedCornerShape(14.dp)
+        3 -> RoundedCornerShape(topStart = 24.dp, topEnd = 2.dp,
+            bottomEnd = 24.dp, bottomStart = 2.dp)
+        4 -> RoundedCornerShape(50)
+        else -> RoundedCornerShape(28.dp)
+    }
     val tileState = if (mediaState.isPlaying) STATE_ACTIVE else STATE_INACTIVE
 
     Surface(
