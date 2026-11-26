@@ -353,7 +353,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 boolean drewAxBlur = drawAxBlurBackground(canvas, backgroundBounds);
                 if (mCardColorMode != 0 || shouldDrawFallbackBackground(drewAxBlur)) {
                     mBackground.setBounds(backgroundBounds);
-                    mBackground.draw(canvas);
+                    drawNeonClippedBackground(canvas, mBackground, backgroundBounds);
                 }
             }
 
@@ -578,9 +578,24 @@ public class NotificationBackgroundView extends View implements Dumpable,
             boolean drewAxBlur = drawAxBlurBackground(canvas, mBackgroundBounds);
             if (mCardColorMode != 0 || shouldDrawFallbackBackground(drewAxBlur)) {
                 drawable.setBounds(left, top, right, bottom);
-                drawable.draw(canvas);
+                drawNeonClippedBackground(canvas, drawable, mBackgroundBounds);
             }
         }
+    }
+
+    /** Keep the neon tint inside the same outline used by the separate outer halo. */
+    private void drawNeonClippedBackground(Canvas canvas, Drawable drawable, Rect bounds) {
+        if ((mCardColorMode != 5 && mCardColorMode != 6) || drawable != mBackground
+                || bounds == null || bounds.isEmpty()) {
+            drawable.draw(canvas);
+            return;
+        }
+        Path cardShape = new Path();
+        cardShape.addRoundRect(new RectF(bounds), mCornerRadii, Path.Direction.CW);
+        int saveCount = canvas.save();
+        canvas.clipPath(cardShape);
+        drawable.draw(canvas);
+        canvas.restoreToCount(saveCount);
     }
 
     protected boolean drawAxBlurBackground(Canvas canvas, Rect bounds) {
