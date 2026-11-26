@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.media.ui.viewmodel.MiniPlayerViewModel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileUsesNeon
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonModifier
@@ -81,6 +82,7 @@ fun MiniPlayerCompact(
         else -> RoundedCornerShape(28.dp)
     }
     val tileState = if (mediaState.isPlaying) STATE_ACTIVE else STATE_INACTIVE
+    val isNeon = qsTileUsesNeon(tileSettings, tileState)
 
     Surface(
         modifier = modifier
@@ -101,10 +103,10 @@ fun MiniPlayerCompact(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(shape)
-                .background(color = bgColor)
+                .background(color = if (isNeon) Color.Transparent else bgColor)
                 .border(
                     width = 1.dp,
-                    color = borderColor,
+                    color = if (isNeon) Color.Transparent else borderColor,
                     shape = shape
                 )
                 .then(qsTileBackgroundModifier(tileSettings, tileState, shape))

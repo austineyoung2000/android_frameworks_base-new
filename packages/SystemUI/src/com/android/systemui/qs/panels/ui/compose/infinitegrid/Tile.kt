@@ -273,11 +273,7 @@ fun ContentScope.Tile(
         val stockTileShape by TileDefaults.animateTileShapeAsState(
             state = uiState.visualState, iconOnly = iconOnly
         )
-        val isNeon = when (uiState.visualState) {
-            STATE_ACTIVE -> labelColors.activeEffect in 5..6
-            STATE_INACTIVE -> labelColors.inactiveEffect in 5..6
-            else -> false
-        }
+        val isNeon = qsTileUsesNeon(labelColors, uiState.visualState)
         val tileShape = when (labelColors.tileShape) {
             1 -> RoundedCornerShape(0.dp)
             2 -> RoundedCornerShape(14.dp)
@@ -320,7 +316,7 @@ fun ContentScope.Tile(
 
         TileExpandable(
             color = {
-                if (qsTileUsesBlur(labelColors, uiState.visualState) || (iconOnly && isNeon)) {
+                if (qsTileUsesBlur(labelColors, uiState.visualState) || isNeon) {
                     Color.Transparent
                 } else {
                     animatedColor
@@ -672,6 +668,14 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
 
 // The QS host can remain composed after the shade closes. Do not retain blur regions then.
 internal val LocalQsTileBlurVisible = staticCompositionLocalOf { false }
+
+/** Neon uses a translucent tint; an opaque stock surface underneath defeats it. */
+internal fun qsTileUsesNeon(settings: CustomLabelColors, state: Int): Boolean =
+    when (state) {
+        STATE_ACTIVE -> settings.activeEffect in 5..6 && settings.activeBackground != null
+        STATE_INACTIVE -> settings.inactiveEffect in 5..6 && settings.inactiveBackground != null
+        else -> false
+    }
 
 internal fun qsTileUsesBlur(settings: CustomLabelColors, state: Int): Boolean =
     when (state) {
