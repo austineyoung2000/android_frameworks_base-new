@@ -6315,6 +6315,10 @@ public class NotificationStackScrollLayout
     public float getMotoCompactPreviewTopOffset() {
         if (!isMotoCompactPreviewVisible() || mAmbientState.getDozeAmount() > 0f) return 0f;
         final View root = getRootView();
+        // Compact previews normally move towards the status bar. With a media player in the
+        // lockscreen column that places Stacks on top of the player; use the column's bounds.
+        if (mRisingStacksActive && Boolean.TRUE.equals(
+                root.getTag(R.id.rising_stacks_media_visible))) return 0f;
         root.getLocationOnScreen(mTempInt2);
         final int rootTop = mTempInt2[1];
         getLocationOnScreen(mTempInt2);
@@ -6327,6 +6331,13 @@ public class NotificationStackScrollLayout
         final float stackTop = SceneContainerFlag.isEnabled()
                 ? mAmbientState.getStackScrollTop() : mAmbientState.getTopPadding();
         return Math.max(0f, stackTop - previewTop);
+    }
+
+    /** Recompute compact preview placement as the lockscreen media player appears or leaves. */
+    public void onRisingStacksMediaVisibilityChanged() {
+        if (!mRisingStacksActive) return;
+        updateContentHeight();
+        requestChildrenUpdate();
     }
 
     private final java.util.WeakHashMap<ExpandableView, Float> mMotoAwakeScreenY =

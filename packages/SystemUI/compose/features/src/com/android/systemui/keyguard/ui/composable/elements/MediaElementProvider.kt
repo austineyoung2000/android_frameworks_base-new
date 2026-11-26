@@ -22,8 +22,10 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import com.android.compose.animation.scene.ElementContentScope
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardMediaViewModel
@@ -36,6 +38,8 @@ import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenEl
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementProvider
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenScope
 import com.android.systemui.shade.ShadeDisplayAware
+import com.android.systemui.res.R
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
 import javax.inject.Inject
 import kotlin.collections.List
 
@@ -58,8 +62,19 @@ constructor(
             val viewModel =
                 rememberViewModel("MediaCarouselElement") { mediaViewModelFactory.create() }
 
+            val root = LocalView.current.rootView
+            val mediaVisible = viewModel.isMediaVisible && !viewModel.isDozing
+            DisposableEffect(root, mediaVisible) {
+                fun updateStacks(visible: Boolean) {
+                    root.setTag(R.id.rising_stacks_media_visible, visible)
+                    root.findViewById<NotificationStackScrollLayout>(R.id.notification_stack_scroller)
+                        ?.onRisingStacksMediaVisibilityChanged()
+                }
+                updateStacks(mediaVisible)
+                onDispose { updateStacks(false) }
+            }
             AnimatedVisibility(
-                viewModel.isMediaVisible && !viewModel.isDozing,
+                mediaVisible,
                 enter = expandVertically(expandFrom = Alignment.Top),
                 exit = fadeOut(),
             ) {
