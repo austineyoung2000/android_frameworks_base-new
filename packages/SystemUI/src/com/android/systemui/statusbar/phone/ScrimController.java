@@ -39,6 +39,8 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Color;
 import android.os.Handler;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.MathUtils;
 import android.util.Pair;
@@ -1360,7 +1362,14 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                 mNotificationsAlpha = 0;
             }
         }
-        if (mState != ScrimState.UNLOCKED) {
+        if (mState == ScrimState.UNLOCKED) {
+            final int transparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(
+                    mContext.getContentResolver(), "qs_background_transparency", 0,
+                    UserHandle.USER_CURRENT)));
+            final float opacity = (100 - transparency) / 100f;
+            mBehindAlpha *= opacity;
+            mNotificationsAlpha *= opacity;
+        } else {
             mAnimatingPanelExpansionOnUnlock = false;
         }
 

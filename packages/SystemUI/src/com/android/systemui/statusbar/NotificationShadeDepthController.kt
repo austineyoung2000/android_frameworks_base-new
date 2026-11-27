@@ -19,7 +19,13 @@ package com.android.systemui.statusbar
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
+import android.app.ActivityManager
 import android.app.WindowConfiguration
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import android.os.SystemClock
 import android.util.IndentingPrintWriter
 import android.util.Log
@@ -135,6 +141,32 @@ constructor(
 
     // Only for dumpsys
     private var lastAppliedBlur = 0
+    private var qsBackdropBlurUser = UserHandle.USER_NULL
+    private var qsBackdropBlurPercent = 100
+    private var qsBackdropBlurObserver: ContentObserver? = null
+
+    private fun qsBackdropBlurFraction(): Float {
+        if (!::root.isInitialized) return 1f
+        val resolver = root.context.contentResolver
+        if (qsBackdropBlurObserver == null) {
+            val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) {
+                    qsBackdropBlurUser = UserHandle.USER_NULL
+                    scheduleUpdate()
+                }
+            }
+            resolver.registerContentObserver(Settings.System.getUriFor("qs_backdrop_blur_strength"),
+                false, observer, UserHandle.USER_ALL)
+            qsBackdropBlurObserver = observer
+        }
+        val user = ActivityManager.getCurrentUser()
+        if (qsBackdropBlurUser != user) {
+            qsBackdropBlurPercent = Settings.System.getIntForUser(resolver,
+                "qs_backdrop_blur_strength", 100, user).coerceIn(0, 100)
+            qsBackdropBlurUser = user
+        }
+        return qsBackdropBlurPercent / 100f
+    }
 
     private var isHomeFocused = true
 
@@ -283,6 +315,10 @@ constructor(
             ShadeInterpolation.getNotificationScrimAlpha(qsPanelExpansion) * shadeExpansion
         combinedBlur = max(combinedBlur, blurUtils.blurRadiusOfRatio(qsExpandedRatio))
         combinedBlur = max(combinedBlur, blurUtils.blurRadiusOfRatio(transitionToFullShadeProgress))
+        // Affect the open unlocked shade, not the separate AOD/wake blur.
+        if (statusBarStateController.state == StatusBarState.SHADE && !statusBarStateController.isDozing) {
+            combinedBlur *= qsBackdropBlurFraction()
+        }
         var shadeRadius = max(combinedBlur, wakeAndUnlockBlurRadius)
 
         if (areBlursDisabledForAppLaunch || blursDisabledForUnlock) {

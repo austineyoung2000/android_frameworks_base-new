@@ -857,17 +857,9 @@ internal fun qsTileBackgroundModifier(
         val neonOpacity = (100 - neonTransparency.coerceIn(0, 100)) / 100f
         val first = when {
             effect in 5..6 -> start.copy(alpha = minOf(start.alpha, neonOpacity))
-            effect in 7..8 && drewBlur -> start.copy(alpha = minOf(start.alpha, glassAlpha) * glassOpacity)
-            // Background blur can be unsupported or unavailable while QS is transitioning.
-            effect in 7..8 -> {
-                val tintMix = glassAlpha.coerceIn(0f, 0.5f)
-                Color(
-                    red = 0.22f * (1f - tintMix) + start.red * tintMix,
-                    green = 0.22f * (1f - tintMix) + start.green * tintMix,
-                    blue = 0.22f * (1f - tintMix) + start.blue * tintMix,
-                    alpha = (if (effect == 8) 0.38f else 0.72f) * glassOpacity,
-                )
-            }
+            // Keep the same translucent tint during transitions and when blur is
+            // unavailable; never replace glass with an opaque fallback surface.
+            effect in 7..8 -> start.copy(alpha = minOf(start.alpha, glassAlpha) * glassOpacity)
             drewBlur -> start.copy(alpha = minOf(start.alpha, 0.63f))
             else -> start
         }
@@ -919,24 +911,29 @@ internal fun qsTileGlassModifier(
         // Soft, shape-clipped bands suggest the curved highlights of a water surface.
         // These are decorative paths, not live backdrop refraction.
         val waterTop = Path().apply {
-            moveTo(0f, size.height * 0.10f)
-            cubicTo(size.width * 0.22f, -size.height * 0.02f,
-                size.width * 0.38f, size.height * 0.20f,
-                size.width * 0.61f, size.height * 0.08f)
-            cubicTo(size.width * 0.78f, 0f, size.width * 0.91f, size.height * 0.12f,
-                size.width, size.height * 0.06f)
+            // On compact/square tiles move the shine into the curved shape instead of
+            // clipping the large-tile highlight entirely outside a circular edge.
+            val top = if (size.width <= size.height * 1.2f) 0.19f else 0.10f
+            moveTo(0f, size.height * top)
+            cubicTo(size.width * 0.22f, size.height * (top - 0.08f),
+                size.width * 0.38f, size.height * (top + 0.08f),
+                size.width * 0.61f, size.height * (top - 0.02f))
+            cubicTo(size.width * 0.78f, size.height * (top - 0.08f),
+                size.width * 0.91f, size.height * (top + 0.02f),
+                size.width, size.height * (top - 0.02f))
             lineTo(size.width, 0f)
             lineTo(0f, 0f)
             close()
         }
         val waterBottom = Path().apply {
-            moveTo(0f, size.height * 0.79f)
-            cubicTo(size.width * 0.23f, size.height * 0.67f,
-                size.width * 0.37f, size.height * 0.98f,
-                size.width * 0.60f, size.height * 0.86f)
-            cubicTo(size.width * 0.78f, size.height * 0.75f,
-                size.width * 0.90f, size.height * 0.96f,
-                size.width, size.height * 0.84f)
+            val bottom = if (size.width <= size.height * 1.2f) 0.73f else 0.79f
+            moveTo(0f, size.height * bottom)
+            cubicTo(size.width * 0.23f, size.height * (bottom - 0.08f),
+                size.width * 0.37f, size.height * (bottom + 0.15f),
+                size.width * 0.60f, size.height * (bottom + 0.04f))
+            cubicTo(size.width * 0.78f, size.height * (bottom - 0.03f),
+                size.width * 0.90f, size.height * (bottom + 0.13f),
+                size.width, size.height * (bottom + 0.05f))
             lineTo(size.width, size.height)
             lineTo(0f, size.height)
             close()
