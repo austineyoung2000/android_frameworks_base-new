@@ -97,7 +97,7 @@ class RisingStacksView(
             }
             row.addView(item, LinearLayout.LayoutParams(dp(iconSize + 18 + glowSpace), dp(iconSize + 20 + glowSpace)).apply {
                 marginStart = if (index == 0) dp(8) else 0
-                marginEnd = dp(4)
+                marginEnd = dp(state.iconSpacing.coerceIn(0, 32))
             })
         }
         val all = TextView(context).apply {

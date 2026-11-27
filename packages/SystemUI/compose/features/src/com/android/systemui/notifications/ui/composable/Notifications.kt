@@ -180,7 +180,8 @@ fun ContentScope.ConstrainedNotificationStack(
     val rootView = LocalView.current.rootView
     val density = LocalDensity.current
     var availableHeightPx by remember { mutableIntStateOf(0) }
-    var widgetHeightPx by remember { mutableIntStateOf(0) }
+    var widgetLimitPx by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    var viewportTopPx by remember { mutableIntStateOf(Int.MIN_VALUE) }
     val widgetGapPx = with(density) { 8.dp.roundToPx() }
     val fingerprintGapPx = with(density) { 12.dp.roundToPx() }
     DisposableEffect(rootView, stacksActive) {
@@ -189,9 +190,17 @@ fun ContentScope.ConstrainedNotificationStack(
             val widgets = listOf(R.id.keyguard_info_widgets, R.id.keyguard_widgets,
                 R.id.keyguard_app_widgets).mapNotNull { rootView.findViewById<View>(it) }
                 .filter { it.isShown && it.alpha > 0f && it.height > 0 }
-            val height = if (stacksActive) widgets.sumOf { it.height } +
-                (widgets.size - 1).coerceAtLeast(0) * widgetGapPx else 0
-            if (widgetHeightPx != height) widgetHeightPx = height
+            val location = IntArray(2)
+            var limit = Int.MAX_VALUE
+            if (stacksActive && viewportTopPx != Int.MIN_VALUE) {
+                widgets.forEach { widget ->
+                    widget.getLocationInWindow(location)
+                    val top = location[1] - viewportTopPx
+                    val bottom = top + widget.height
+                    if (bottom > 0) limit = minOf(limit, (top - widgetGapPx).coerceAtLeast(0))
+                }
+            }
+            if (widgetLimitPx != limit) widgetLimitPx = limit
             true
         }
         if (observer.isAlive) observer.addOnPreDrawListener(listener)
@@ -221,6 +230,7 @@ fun ContentScope.ConstrainedNotificationStack(
                 }
                 .onPlaced {
                     val rawBounds = it.rawBoundsInWindow()
+                    viewportTopPx = rawBounds.top.toInt()
                     debugLog(viewModel) { "Constrained.container onPlaced bounds=$rawBounds" }
                     if (!stacksActive) viewModel.setStackBounds(rawBounds)
                 }
@@ -237,8 +247,7 @@ fun ContentScope.ConstrainedNotificationStack(
                         .heightIn(
                             max = if (availableHeightPx > 0) {
                                 with(density) {
-                                    (availableHeightPx - widgetHeightPx -
-                                        (if (widgetHeightPx > 0) widgetGapPx else 0) -
+                                    (minOf(availableHeightPx, widgetLimitPx) -
                                         fingerprintGapPx).coerceAtLeast(0).toDp()
                                 }
                             } else Dp.Unspecified

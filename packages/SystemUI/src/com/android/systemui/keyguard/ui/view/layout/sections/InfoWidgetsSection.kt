@@ -28,9 +28,7 @@ import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.res.R
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.lockscreen.ExtraInfoWidgetsController
-import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.plugins.statusbar.StatusBarStateController
-import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
 import javax.inject.Inject
 import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
 
@@ -85,9 +83,6 @@ constructor(
         val gap = (8f * context.resources.displayMetrics.density + 0.5f).toInt()
         val listener = ViewTreeObserver.OnPreDrawListener {
             val root = constraintLayout.rootView
-            val stack = root.findViewById<NotificationStackScrollLayout>(
-                R.id.notification_stack_scroller
-            )
             val ambientPeek = statusBarStateController.isDozing &&
                 Settings.System.getIntForUser(context.contentResolver, "ambient_peek_enabled", 0,
                     ActivityManager.getCurrentUser()) != 0
@@ -114,67 +109,7 @@ constructor(
                 widget.translationY = if (clockBottom > 0)
                     (clockBottom + gap - baseTop).coerceAtLeast(0f) else 0f
                 positionAdjustmentApplied = widget.translationY != 0f
-            } else if (widget.isShown && stack != null && stack.isRisingStacksActive &&
-                stack.isMotoCompactDesignActive
-            ) {
-                var contentBottom: Int? = null
-                val clockIds = intArrayOf(
-                    R.id.clock_ls,
-                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
-                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE,
-                    R.id.keyguard_slice_view,
-                    R.id.keyguard_weather,
-                    R.id.default_weather_image,
-                    R.id.default_weather_text,
-                )
-                for (id in clockIds) {
-                    val content = root.findViewById<View>(id) ?: continue
-                    if (!content.isShown || content.alpha <= 0f || content.height <= 0 ||
-                        content.height >= root.height * 0.6f
-                    ) continue
-                    content.getLocationOnScreen(rowLocation)
-                    val bottom = rowLocation[1] + (content.height * content.scaleY).toInt()
-                    contentBottom = maxOf(contentBottom ?: bottom, bottom)
-                }
-                if (stack != null) {
-                    val stacksActive =
-                        stack.isRisingStacksActive && stack.isMotoCompactDesignActive
-                    var hasNotification = false
-                    for (i in 0 until stack.childCount) {
-                        val child = stack.getChildAt(i)
-                        if (child is ExpandableNotificationRow && child.isShown &&
-                            child.alpha > 0f &&
-                            (!stacksActive || stack.isMotoCompactNotificationSelected(child))
-                        ) {
-                            child.getLocationOnScreen(rowLocation)
-                            val visibleHeight =
-                                (child.actualHeight - child.clipBottomAmount).coerceAtLeast(0)
-                            val bottom = rowLocation[1] + (visibleHeight * child.scaleY).toInt()
-                            contentBottom = maxOf(contentBottom ?: bottom, bottom)
-                            hasNotification = true
-                        }
-                    }
-                    // When Stacks is visible without a preview, keep widgets below its icon row.
-                    if (stacksActive && !hasNotification) {
-                        val shelf = stack.shelf
-                        if (shelf != null && shelf.isLaidOut && shelf.isShown) {
-                            shelf.getLocationOnScreen(rowLocation)
-                            val bottom = rowLocation[1] + shelf.actualHeight
-                            contentBottom = maxOf(contentBottom ?: bottom, bottom)
-                        }
-                    }
-                }
-                if (contentBottom != null) {
-                    // Off-screen cards should not push widgets into the fingerprint area.
-                    val viewportBottom = stack.risingStacksViewportBottomOnScreen
-                    // The viewport already reserves the widget row above the fingerprint.
-                    // Place it at that boundary while keeping it below the visible cards.
-                    val anchorBottom = if (viewportBottom > 0) viewportBottom else contentBottom
-                    widget.getLocationOnScreen(widgetLocation)
-                    val untranslatedTop = widgetLocation[1] - widget.translationY
-                    widget.translationY = anchorBottom + gap - untranslatedTop
-                    positionAdjustmentApplied = true
-                } else if (positionAdjustmentApplied) {
+            } else if (positionAdjustmentApplied) {
                     widget.translationY = 0f
                     positionAdjustmentApplied = false
                 }

@@ -130,8 +130,7 @@ class KeyguardWidgetViewSection @Inject constructor(
                 return bottom
             }
             val contentBottom = listOf(R.id.clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
-                ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE, R.id.keyguard_info_widgets,
-                R.id.keyguard_widgets)
+                ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE)
                 .mapNotNull { constraintLayout.findViewById<View>(it) }.maxOfOrNull(::visualBottom) ?: 0
             val anchor = constraintLayout.findViewById<View>(R.id.keyguard_app_widget_anchor)
             val params = viewport.layoutParams as? ConstraintLayout.LayoutParams
@@ -144,10 +143,8 @@ class KeyguardWidgetViewSection @Inject constructor(
                 .mapNotNull { constraintLayout.findViewById<View>(it) }
                 .filter { it.visibility != View.GONE && it.top > 0 }
                 .minOfOrNull { it.top } ?: (constraintLayout.height - reserved)
-            val gap = (8 * density).toInt()
             viewport.maximumHeight = minOf((constraintLayout.height * 0.45f).toInt(),
-                limit - viewport.top - gap,
-                constraintLayout.height - viewport.top - reserved).coerceAtLeast(0)
+                limit - viewport.top - reserved).coerceAtLeast(0)
             true
         }
         layoutListener = listener

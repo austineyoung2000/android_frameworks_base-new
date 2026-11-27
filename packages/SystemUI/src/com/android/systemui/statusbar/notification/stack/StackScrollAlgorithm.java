@@ -570,12 +570,15 @@ public class StackScrollAlgorithm {
         float currentY = -ambientState.getScrollY();
         // add top padding at the start as long as we're not on the lock screen
         currentY += getScrimTopPaddingOrZero(ambientState);
-        if (mHostView instanceof NotificationStackScrollLayout stack) {
-            currentY += stack.getRisingStacksHeaderHeight();
-        }
+        boolean stacksHeaderAdded = false;
         state.firstViewInShelf = null;
         for (int i = 0; i < state.visibleChildren.size(); i++) {
             final ExpandableView view = state.visibleChildren.get(i);
+            if (!stacksHeaderAdded && mHostView instanceof NotificationStackScrollLayout stack
+                    && stack.isRisingStacksPreviewRow(view)) {
+                currentY += stack.getRisingStacksHeaderHeight();
+                stacksHeaderAdded = true;
+            }
 
             currentY += getGapHeightForChild(ambientState.getSectionProvider(), i, view,
                     getPreviousView(i, state), ambientState.getFractionToShade(),
@@ -642,14 +645,17 @@ public class StackScrollAlgorithm {
         float scrimTopPadding = getScrimTopPaddingOrZero(ambientState);
         algorithmState.mCurrentYPosition += scrimTopPadding;
         algorithmState.mCurrentExpandedYPosition += scrimTopPadding;
-        if (mHostView instanceof NotificationStackScrollLayout stack) {
-            int stacksHeaderHeight = stack.getRisingStacksHeaderHeight();
-            algorithmState.mCurrentYPosition += stacksHeaderHeight;
-            algorithmState.mCurrentExpandedYPosition += stacksHeaderHeight;
-        }
-
+        boolean stacksHeaderAdded = false;
         int childCount = algorithmState.visibleChildren.size();
         for (int i = 0; i < childCount; i++) {
+            final ExpandableView view = algorithmState.visibleChildren.get(i);
+            if (!stacksHeaderAdded && mHostView instanceof NotificationStackScrollLayout stack
+                    && stack.isRisingStacksPreviewRow(view)) {
+                final int height = stack.getRisingStacksHeaderHeight();
+                algorithmState.mCurrentYPosition += height;
+                algorithmState.mCurrentExpandedYPosition += height;
+                stacksHeaderAdded = true;
+            }
             updateChild(i, algorithmState, ambientState);
         }
     }

@@ -43,6 +43,10 @@ import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.initOnBackPressedDispatcherOwner
 import com.android.systemui.lifecycle.repeatWhenAttached
+import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.media.ui.compose.MiniPlayerCompact
+import com.android.systemui.media.ui.viewmodel.MiniPlayerViewModel
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
 import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
 import com.android.systemui.media.controls.ui.view.MediaHost
 import com.android.systemui.media.controls.ui.view.MediaHostState
@@ -104,11 +108,16 @@ constructor(
     private val logger: KeyguardMediaControllerLogger,
     dumpManager: DumpManager,
     private val mediaViewModelFactory: MediaViewModel.Factory,
+    private val miniPlayerViewModelFactory: MiniPlayerViewModel.Factory,
+    private val risingStacksController: RisingStacksController,
     private val mediaCarouselInteractor: MediaCarouselInteractor,
     private val falsingSystem: MediaFalsingSystem,
     private val secureSettings: SecureSettings,
 ) : Dumpable {
     private var lastUsedStatusBarState = -1
+    private var stacksEnabled by mutableStateOf(false)
+    private val useStacksPlayer: Boolean
+        get() = stacksEnabled && statusBarStateController.state == StatusBarState.KEYGUARD
 
     /** Is the media player visible? */
     var visible by mutableStateOf(false)
@@ -171,9 +180,18 @@ constructor(
                     .collect { isMediaVisibleOnLockscreen = it }
             }
         }
+        applicationScope.launch {
+            risingStacksController.isEnabled.collect { enabled ->
+                stacksEnabled = enabled
+                reattachHostView()
+                refreshMediaPosition(reason = "Rising Stacks setting changed")
+            }
+        }
+
         statusBarStateController.addCallback(
             object : StatusBarStateController.StateListener {
                 override fun onStateChanged(newState: Int) {
+                    reattachHostView()
                     refreshMediaPosition(reason = "StatusBarState.onStateChanged")
                 }
 
@@ -200,7 +218,14 @@ constructor(
                     (1f - (fullShadeTransitionProgress / 0.25f)).coerceIn(0f, 1f)
                 }
             }
-            Media(
+            if (useStacksPlayer && visible) {
+                val miniPlayer = rememberViewModel("MiniPlayerStacksLegacy") {
+                    miniPlayerViewModelFactory.create()
+                }
+                MiniPlayerCompact(viewModel = miniPlayer, compact = true,
+                    notificationAppearance = true,
+                    modifier = Modifier.graphicsLayer { alpha = transitionAlpha })
+            } else if (!useStacksPlayer) Media(
                 viewModelFactory = mediaViewModelFactory,
                 presentationStyle = MediaPresentationStyle.Default,
                 behavior =
@@ -311,7 +336,7 @@ constructor(
             if (useSplitShade) {
                 return
             }
-            if (MediaControlsInComposeFlag.isEnabled) {
+            if (MediaControlsInComposeFlag.isEnabled || useStacksPlayer) {
                 composeView.layoutParams.apply {
                     height = ViewGroup.LayoutParams.WRAP_CONTENT
                     width = ViewGroup.LayoutParams.MATCH_PARENT
@@ -346,27 +371,30 @@ constructor(
         if (inactiveContainer?.childCount == 1) {
             inactiveContainer.removeAllViews()
         }
-        if (activeContainer?.childCount == 0) {
-            if (MediaControlsInComposeFlag.isEnabled) {
-                composeView.parent?.let { (it as? ViewGroup)?.removeView(composeView) }
-                activeContainer.addView(composeView)
-                composeView.layoutParams.apply {
-                    height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    width = ViewGroup.LayoutParams.MATCH_PARENT
-                }
+        if (activeContainer != null) {
+            val desired = if (MediaControlsInComposeFlag.isEnabled || useStacksPlayer) {
+                composeView
             } else {
-                // Detach the hostView from its parent view if exists
-                mediaHost.hostView.parent?.let {
-                    (it as? ViewGroup)?.removeView(mediaHost.hostView)
+                mediaHost.hostView
+            }
+            if (desired.parent !== activeContainer) {
+                (composeView.parent as? ViewGroup)?.removeView(composeView)
+                if (!MediaControlsInComposeFlag.isEnabled) {
+                    (mediaHost.hostView.parent as? ViewGroup)?.removeView(mediaHost.hostView)
                 }
-                activeContainer.addView(mediaHost.hostView)
+                (desired.parent as? ViewGroup)?.removeView(desired)
+                activeContainer.addView(desired)
+            }
+            desired.layoutParams.apply {
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                width = ViewGroup.LayoutParams.MATCH_PARENT
             }
         }
     }
 
     fun isWithinMediaViewBounds(x: Int, y: Int): Boolean {
         if (!visible) return false
-        if (MediaControlsInComposeFlag.isEnabled) {
+        if (MediaControlsInComposeFlag.isEnabled || useStacksPlayer) {
             return composeView.boundsOnScreen.contains(x, y)
         }
         return mediaHost.visible && mediaHost.hostView.boundsOnScreen.contains(x, y)
@@ -392,7 +420,7 @@ constructor(
                 isBypassNotEnabled &&
                 keyguardOrUserSwitcher &&
                 shouldBeVisibleForSplitShade &&
-                !notificationPreviewVisible
+                (!notificationPreviewVisible || stacksEnabled)
         logger.logRefreshMediaPosition(
             reason = reason,
             visible = visible,

@@ -6315,10 +6315,8 @@ public class NotificationStackScrollLayout
     public float getMotoCompactPreviewTopOffset() {
         if (!isMotoCompactPreviewVisible() || mAmbientState.getDozeAmount() > 0f) return 0f;
         final View root = getRootView();
-        // Compact previews normally move towards the status bar. With a media player in the
-        // lockscreen column that places Stacks on top of the player; use the column's bounds.
-        if (mRisingStacksActive && Boolean.TRUE.equals(
-                root.getTag(R.id.rising_stacks_media_visible))) return 0f;
+        // Stacks follows the keyguard notification bounds for every clock and media state.
+        if (mRisingStacksActive) return 0f;
         root.getLocationOnScreen(mTempInt2);
         final int rootTop = mTempInt2[1];
         getLocationOnScreen(mTempInt2);
@@ -6489,11 +6487,24 @@ public class NotificationStackScrollLayout
             getLocationOnScreen(location);
             bottom = Math.min(bottom, location[1] + getHeight() - (int) mKeyguardBottomPadding);
         }
-        final View widget = root.findViewById(R.id.keyguard_info_widgets);
-        final int widgetHeight = widget != null && widget.isShown() ? widget.getHeight() : 0;
-        final int gap = Math.round((widgetHeight > 0 ? 20f : 12f)
-                * getResources().getDisplayMetrics().density);
-        return bottom - widgetHeight - gap;
+        // Widgets normally live above the notification placeholder. Only reserve their
+        // actual top edge if a configured widget is below the start of this viewport.
+        final int[] stackLocation = new int[2];
+        getLocationOnScreen(stackLocation);
+        final float stackTop = stackLocation[1] + mAmbientState.getStackY();
+        final int gap = Math.round(12f * getResources().getDisplayMetrics().density);
+        final int[] widgetLocation = new int[2];
+        for (int id : new int[] {R.id.keyguard_info_widgets, R.id.keyguard_widgets,
+                R.id.keyguard_app_widgets}) {
+            final View widget = root.findViewById(id);
+            if (widget == null || !widget.isShown() || widget.getAlpha() <= 0f
+                    || widget.getHeight() <= 0) continue;
+            widget.getLocationOnScreen(widgetLocation);
+            if (widgetLocation[1] > stackTop && widgetLocation[1] < bottom) {
+                bottom = widgetLocation[1];
+            }
+        }
+        return bottom - gap;
     }
 
     /** The offset already applied by the active notification scrolling container. */
