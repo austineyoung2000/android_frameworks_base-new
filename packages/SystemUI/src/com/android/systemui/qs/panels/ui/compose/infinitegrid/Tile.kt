@@ -865,7 +865,7 @@ internal fun qsTileBackgroundModifier(
                     red = 0.22f * (1f - tintMix) + start.red * tintMix,
                     green = 0.22f * (1f - tintMix) + start.green * tintMix,
                     blue = 0.22f * (1f - tintMix) + start.blue * tintMix,
-                    alpha = 0.72f * glassOpacity,
+                    alpha = (if (effect == 8) 0.38f else 0.72f) * glassOpacity,
                 )
             }
             drewBlur -> start.copy(alpha = minOf(start.alpha, 0.63f))
@@ -916,9 +916,48 @@ internal fun qsTileGlassModifier(
             0.70f to Color.White.copy(alpha = if (liquid) 0.12f else 0.06f),
             1f to Color.White.copy(alpha = if (liquid) 0.55f else 0.28f),
         )
+        // Soft, shape-clipped bands suggest the curved highlights of a water surface.
+        // These are decorative paths, not live backdrop refraction.
+        val waterTop = Path().apply {
+            moveTo(0f, size.height * 0.10f)
+            cubicTo(size.width * 0.22f, -size.height * 0.02f,
+                size.width * 0.38f, size.height * 0.20f,
+                size.width * 0.61f, size.height * 0.08f)
+            cubicTo(size.width * 0.78f, 0f, size.width * 0.91f, size.height * 0.12f,
+                size.width, size.height * 0.06f)
+            lineTo(size.width, 0f)
+            lineTo(0f, 0f)
+            close()
+        }
+        val waterBottom = Path().apply {
+            moveTo(0f, size.height * 0.79f)
+            cubicTo(size.width * 0.23f, size.height * 0.67f,
+                size.width * 0.37f, size.height * 0.98f,
+                size.width * 0.60f, size.height * 0.86f)
+            cubicTo(size.width * 0.78f, size.height * 0.75f,
+                size.width * 0.90f, size.height * 0.96f,
+                size.width, size.height * 0.84f)
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+        val waterHighlight = Brush.verticalGradient(
+            0f to Color.White.copy(alpha = 0.30f),
+            0.22f to Color.White.copy(alpha = 0.04f),
+            1f to Color.Transparent,
+        )
+        val waterDepth = Brush.verticalGradient(
+            0f to Color.Transparent,
+            0.75f to Color.White.copy(alpha = 0.04f),
+            1f to Color.White.copy(alpha = 0.18f),
+        )
         onDrawBehind {
             clipPath(path) {
                 drawRect(brush = sheen)
+                if (liquid) {
+                    drawPath(waterTop, brush = waterHighlight)
+                    drawPath(waterBottom, brush = waterDepth)
+                }
                 drawPath(path, brush = rim, style = Stroke((if (liquid) 2f else 1f).dp.toPx()))
             }
         }
