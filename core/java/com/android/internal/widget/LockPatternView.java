@@ -126,6 +126,7 @@ public class LockPatternView extends View {
     private int mRisingPatternFirst = 0xff6200ee;
     private int mRisingPatternSecond = 0xff0000ff;
     private int mRisingPatternIntensity = 60;
+    private int mRisingPatternTransparency = 81;
     private final Paint mRisingPatternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
 
@@ -1900,6 +1901,13 @@ public class LockPatternView extends View {
     /** Set optional visual treatment and dot shape for the credential pattern. @hide */
     public void setRisingPatternAppearance(int effect, int style, int first, int second,
             int intensity, int shape) {
+        setRisingPatternAppearance(effect, style, first, second, intensity, shape, 81);
+    }
+
+    /** Set optional visual treatment, shape, and neon fill transparency. @hide */
+    public void setRisingPatternAppearance(int effect, int style, int first, int second,
+            int intensity, int shape, int transparency) {
+        mRisingPatternTransparency = Math.max(0, Math.min(100, transparency));
         mPatternHalo = null;
         mRisingPatternShape = Math.max(0, Math.min(3, shape));
         mRisingPatternEffect = Math.max(0, Math.min(4, effect));
@@ -2299,7 +2307,8 @@ public class LockPatternView extends View {
         paint.setShader(new LinearGradient(centerX - radius, centerY,
                 centerX + Math.max(radius, 1f), centerY, first, second, Shader.TileMode.CLAMP));
         paint.setStyle(Paint.Style.FILL);
-        paint.setAlpha(Math.round(alpha * (neon || mRisingPatternStyle == 1 ? 48 : 255)));
+        paint.setAlpha(Math.round(alpha * (neon ? (100 - mRisingPatternTransparency) * 255 / 100
+                : mRisingPatternStyle == 1 ? 48 : 255)));
         canvas.drawPath(shape, paint);
         if (mRisingPatternStyle == 1 || neon) {
             paint.setStyle(Paint.Style.STROKE);

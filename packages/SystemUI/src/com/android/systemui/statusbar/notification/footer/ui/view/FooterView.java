@@ -97,7 +97,7 @@ public class FooterView extends StackScrollerDecorView {
         Dependency.get(TunerService.class).addTunable(mCardAppearanceTunable,
                 "system:notification_card_color_mode", "system:notification_card_color_first",
                 "system:notification_card_color_second", "system:notification_card_style",
-                "system:notification_card_glow_intensity");
+                "system:notification_card_glow_intensity", "system:notification_card_neon_transparency");
     }
 
     @Override
@@ -397,6 +397,9 @@ public class FooterView extends StackScrollerDecorView {
         int neonIntensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(
                 mContext.getContentResolver(), "notification_card_glow_intensity", 60,
                 UserHandle.USER_CURRENT)));
+        int transparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(
+                mContext.getContentResolver(), "notification_card_neon_transparency", 78,
+                UserHandle.USER_CURRENT)));
         if (colorMode >= 1 && colorMode <= 6) {
             int first = Settings.System.getIntForUser(mContext.getContentResolver(),
                     "notification_card_color_first", Color.MAGENTA, UserHandle.USER_CURRENT);
@@ -406,8 +409,8 @@ public class FooterView extends StackScrollerDecorView {
             neonFirst = first;
             neonSecond = second;
             if (colorMode >= 5) {
-                first = ColorUtils.setAlphaComponent(first, Math.min(Color.alpha(first), 56));
-                second = ColorUtils.setAlphaComponent(second, Math.min(Color.alpha(second), 56));
+                first = ColorUtils.setAlphaComponent(first, Math.min(Color.alpha(first), (100 - transparency) * 255 / 100));
+                second = ColorUtils.setAlphaComponent(second, Math.min(Color.alpha(second), (100 - transparency) * 255 / 100));
             }
             clearAllBg = makeCardBackground(first, second);
             settingsBg = makeCardBackground(first, second);

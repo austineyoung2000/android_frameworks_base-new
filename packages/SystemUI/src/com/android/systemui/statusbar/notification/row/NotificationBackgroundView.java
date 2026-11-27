@@ -124,6 +124,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private boolean mIsBlurSupported = false;
     private int mCardColorMode;
     private int mCardGlowIntensity;
+    private int mCardNeonTransparency;
     private Bitmap mCardGlowBitmap;
     private int mCardGlowBitmapWidth;
     private int mCardGlowBitmapHeight;
@@ -151,6 +152,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 "notification_card_color_second", Color.BLUE, UserHandle.USER_CURRENT);
         mCardGlowIntensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(resolver,
                 "notification_card_glow_intensity", 60, UserHandle.USER_CURRENT)));
+        mCardNeonTransparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(resolver,
+                "notification_card_neon_transparency", 78, UserHandle.USER_CURRENT)));
         mCardStyle = Settings.System.getIntForUser(resolver,
                 "notification_card_style", 0, UserHandle.USER_CURRENT);
         if (getParent() instanceof ActivatableNotificationView) {
@@ -262,7 +265,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
         Dependency.get(TunerService.class).addTunable(mCardAppearanceTunable,
                 "system:notification_card_color_mode", "system:notification_card_color_first",
                 "system:notification_card_color_second", "system:notification_card_style",
-                "system:notification_card_glow_intensity");
+                "system:notification_card_glow_intensity", "system:notification_card_neon_transparency");
         CrossWindowBlurListeners.getInstance().addListener(
                 getContext().getMainExecutor(), mCardBlurListener);
         updateCardBlur();
@@ -830,8 +833,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
             if (mCardColorMode == 5 || mCardColorMode == 6) {
                 // Use the same restrained neon tint as QS; the cached halo and selected
                 // card style provide the glow and outline over this surface.
-                first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), 56) << 24);
-                second = (second & 0x00ffffff) | (Math.min(Color.alpha(second), 56) << 24);
+                first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), (100 - mCardNeonTransparency) * 255 / 100) << 24);
+                second = (second & 0x00ffffff) | (Math.min(Color.alpha(second), (100 - mCardNeonTransparency) * 255 / 100) << 24);
             } else if (customCardBlurAvailable()) {
                 first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), 160) << 24);
                 second = (second & 0x00ffffff) | (Math.min(Color.alpha(second), 160) << 24);

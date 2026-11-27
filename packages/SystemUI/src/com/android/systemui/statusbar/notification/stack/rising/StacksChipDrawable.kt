@@ -27,6 +27,7 @@ internal class StacksChipDrawable(
     private val second: Int,
     private val outline: Boolean,
     private val intensity: Int,
+    private val transparency: Int = 78,
 ) : Drawable() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var halo: Bitmap? = null
@@ -77,7 +78,7 @@ internal class StacksChipDrawable(
         } else {
             paint.shader = LinearGradient(rect.left, 0f, rect.right, 0f, first, end,
                 Shader.TileMode.CLAMP)
-            paint.alpha = if (neon) 56 else 255
+            paint.alpha = if (neon) (100 - transparency.coerceIn(0, 100)) * 255 / 100 else 255
         }
         val fillAlpha = paint.alpha
         paint.alpha = fillAlpha * alphaValue / 255

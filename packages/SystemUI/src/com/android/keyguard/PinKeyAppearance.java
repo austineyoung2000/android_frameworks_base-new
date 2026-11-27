@@ -21,8 +21,8 @@ import android.provider.Settings;
 final class PinKeyAppearance {
     static final String[] KEYS = {"rising_pin_effect", "rising_pin_shape", "rising_pin_first_color",
             "rising_pin_second_color", "rising_pin_digit_color", "rising_pin_glow_intensity",
-            "rising_pin_style"};
-    private int effect, shape, first, second, digit, intensity, style;
+            "rising_pin_style", "rising_pin_neon_transparency"};
+    private int effect, shape, first, second, digit, intensity, style, transparency;
     private Bitmap halo;
     private int width, height, padding;
     private float cachedDensity;
@@ -36,6 +36,7 @@ final class PinKeyAppearance {
         digit = Settings.System.getIntForUser(r, KEYS[4], Color.WHITE, UserHandle.USER_CURRENT);
         intensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(r, KEYS[5], 60, UserHandle.USER_CURRENT)));
         style = Math.max(0, Math.min(7, Settings.System.getIntForUser(r, KEYS[6], 0, UserHandle.USER_CURRENT)));
+        transparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(r, KEYS[7], 78, UserHandle.USER_CURRENT)));
         halo = null;
     }
 
@@ -51,6 +52,8 @@ final class PinKeyAppearance {
                 0xff0000ff, UserHandle.USER_CURRENT);
         intensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(r,
                 prefix + "_glow_intensity", 60, UserHandle.USER_CURRENT)));
+        transparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(r,
+                prefix + "_neon_transparency", 78, UserHandle.USER_CURRENT)));
         style = hasStyle ? Math.max(0, Math.min(7, Settings.System.getIntForUser(r,
                 prefix + "_style", 0, UserHandle.USER_CURRENT))) : 0;
         halo = null;
@@ -91,7 +94,7 @@ final class PinKeyAppearance {
             Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
             if (effect != 0) {
                 p.setShader(new LinearGradient(rect.left, 0, rect.right, 0, first, end, Shader.TileMode.CLAMP));
-                p.setAlpha(effect == 3 || effect == 4 ? 56 : 255);
+                p.setAlpha(effect == 3 || effect == 4 ? (100 - transparency) * 255 / 100 : 255);
                 canvas.drawPath(path, p);
                 p.setShader(null);
             }

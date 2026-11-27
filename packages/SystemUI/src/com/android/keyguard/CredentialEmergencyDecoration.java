@@ -48,7 +48,7 @@ final class CredentialEmergencyDecoration {
         }
         if (prefix == null) return;
         for (String suffix : new String[]{"_effect", "_style", "_first_color",
-                "_second_color", "_glow_intensity"}) {
+                "_second_color", "_glow_intensity", "_neon_transparency"}) {
             view.getContext().getContentResolver().registerContentObserver(
                     Settings.System.getUriFor(prefix + suffix), false, observer, UserHandle.USER_ALL);
         }

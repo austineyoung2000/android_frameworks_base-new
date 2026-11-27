@@ -126,5 +126,5 @@ class RisingStacksView(
 
     private fun chipBackground(selected: Boolean, state: RisingStacksController.UiState) =
         if (!selected) null else StacksChipDrawable(density, state.effect, state.firstColor,
-            state.secondColor, state.outline, state.glowIntensity)
+            state.secondColor, state.outline, state.glowIntensity, state.neonTransparency)
 }

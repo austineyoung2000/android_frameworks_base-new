@@ -216,8 +216,8 @@ fun BrightnessSlider(
                         val first = appearance.fill ?: defaultFill
                         val second = if (appearance.effect == 2) appearance.end ?: first else first
                         Brush.horizontalGradient(listOf(
-                            first.copy(alpha = minOf(first.alpha, 0.22f)),
-                            second.copy(alpha = minOf(second.alpha, 0.22f))))
+                            first.copy(alpha = minOf(first.alpha, (100 - appearance.neonTransparency) / 100f)),
+                            second.copy(alpha = minOf(second.alpha, (100 - appearance.neonTransparency) / 100f))))
                     } else {
                         androidx.compose.ui.graphics.SolidColor(appearance.fill ?: defaultFill)
                     }, CircleShape)

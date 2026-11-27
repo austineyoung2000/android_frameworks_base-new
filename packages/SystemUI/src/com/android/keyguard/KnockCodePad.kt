@@ -78,7 +78,7 @@ fun KnockCodePad(state: KnockCodeUiState, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val resolver = view.context.contentResolver
     val keys = listOf("rising_knock_effect", "rising_knock_first_color",
-        "rising_knock_second_color", "rising_knock_glow_intensity")
+        "rising_knock_second_color", "rising_knock_glow_intensity", "rising_knock_neon_transparency")
     var appearance by remember { mutableStateOf(readKnockAppearance(view)) }
     DisposableEffect(resolver) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -218,7 +218,7 @@ fun KnockCodePad(state: KnockCodeUiState, modifier: Modifier = Modifier) {
                 if (custom) {
                     drawRoundRect(brush = brush, topLeft = geometry.square.topLeft,
                         size = geometry.square.size, cornerRadius = CornerRadius(cornerPx, cornerPx),
-                        alpha = if (neon) .16f else .3f)
+                        alpha = if (neon) (100 - appearance.transparency) / 100f else .3f)
                 }
                 drawCellSeparators(
                     geometry = geometry,
@@ -257,7 +257,7 @@ fun KnockCodePad(state: KnockCodeUiState, modifier: Modifier = Modifier) {
     }
 }
 
-private data class KnockAppearance(val effect: Int, val first: Int, val second: Int, val intensity: Int)
+private data class KnockAppearance(val effect: Int, val first: Int, val second: Int, val intensity: Int, val transparency: Int)
 
 private fun readKnockAppearance(view: android.view.View): KnockAppearance {
     val r = view.context.contentResolver
@@ -265,7 +265,8 @@ private fun readKnockAppearance(view: android.view.View): KnockAppearance {
     return KnockAppearance(setting("rising_knock_effect", 0).coerceIn(0, 4),
         setting("rising_knock_first_color", 0xff6200ee.toInt()),
         setting("rising_knock_second_color", 0xff0000ff.toInt()),
-        setting("rising_knock_glow_intensity", 60).coerceIn(0, 100))
+        setting("rising_knock_glow_intensity", 60).coerceIn(0, 100),
+        setting("rising_knock_neon_transparency", 84).coerceIn(0, 100))
 }
 
 private data class PadGeometry(val square: Rect, val dotsY: Float)

@@ -38,6 +38,7 @@ class RisingStacksController @Inject constructor(
         val secondColor: Int = 0xff315bff.toInt(),
         val outline: Boolean = true,
         val glowIntensity: Int = 60,
+        val neonTransparency: Int = 78,
     )
 
     private val mutableState = MutableStateFlow(UiState())
@@ -55,6 +56,7 @@ class RisingStacksController @Inject constructor(
     private var secondColor = 0xff315bff.toInt()
     private var outline = true
     private var glowIntensity = 60
+    private var neonTransparency = 78
     private var attached = false
     private var visibleGroups: List<RisingStacksModel.AppGroup> = emptyList()
 
@@ -115,11 +117,12 @@ class RisingStacksController @Inject constructor(
                 "system:rising_stacks_second_color" -> secondColor = value?.toIntOrNull() ?: 0xff315bff.toInt()
                 "system:rising_stacks_outline" -> outline = value?.toIntOrNull()?.let { it != 0 } ?: true
                 "system:rising_stacks_glow_intensity" -> glowIntensity = (value?.toIntOrNull() ?: 60).coerceIn(0, 100)
+                "system:rising_stacks_neon_transparency" -> neonTransparency = (value?.toIntOrNull() ?: 78).coerceIn(0, 100)
             }
             publish()
         }, "system:rising_stacks_icon_size", "system:rising_stacks_icon_spacing", "system:rising_stacks_effect",
             "system:rising_stacks_first_color", "system:rising_stacks_second_color",
-            "system:rising_stacks_outline", "system:rising_stacks_glow_intensity")
+            "system:rising_stacks_outline", "system:rising_stacks_glow_intensity", "system:rising_stacks_neon_transparency")
     }
 
     fun select(app: RisingStacksModel.AppKey?) {
@@ -171,7 +174,7 @@ class RisingStacksController @Inject constructor(
         val show = enabled && onLockscreen() &&
             visibleGroups.isNotEmpty()
         mutableState.value = UiState(show, if (show) visibleGroups else emptyList(), selected, iconPack,
-            iconSize, iconSpacing, effect, firstColor, secondColor, outline, glowIntensity)
+            iconSize, iconSpacing, effect, firstColor, secondColor, outline, glowIntensity, neonTransparency)
     }
 
     private fun keyFor(entry: NotificationEntry): RisingStacksModel.AppKey =

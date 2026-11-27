@@ -245,10 +245,13 @@ private fun NotificationMediaBackground(modifier: Modifier, nativeColor: Int) {
                             android.graphics.Color.BLUE, user) else first
                     if (mode == 0) { first = nativeColor; second = nativeColor }
                     if (mode == 5 || mode == 6) {
+                        val transparency = Settings.System.getIntForUser(resolver,
+                            "notification_card_neon_transparency", 78, user).coerceIn(0, 100)
+                        val maxAlpha = (100 - transparency) * 255 / 100
                         first = (first and 0x00ffffff) or
-                            (minOf(android.graphics.Color.alpha(first), 56) shl 24)
+                            (minOf(android.graphics.Color.alpha(first), maxAlpha) shl 24)
                         second = (second and 0x00ffffff) or
-                            (minOf(android.graphics.Color.alpha(second), 56) shl 24)
+                            (minOf(android.graphics.Color.alpha(second), maxAlpha) shl 24)
                     }
                     val fill = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
                         intArrayOf(first, second))

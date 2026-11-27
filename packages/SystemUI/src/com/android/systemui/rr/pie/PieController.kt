@@ -97,6 +97,7 @@ constructor(
     private var firstColor = 0xff6200ee.toInt()
     private var secondColor = 0xff0000ff.toInt()
     private var glowIntensity = 60
+    private var neonTransparency = 78
     private var holdDuration = 250L
     private var edgeWidth = 16f
     private var movementTolerance = 100
@@ -145,6 +146,7 @@ constructor(
         firstColor = int(KEY_FIRST_COLOR, 0xff6200ee.toInt())
         secondColor = int(KEY_SECOND_COLOR, 0xff0000ff.toInt())
         glowIntensity = int(KEY_GLOW_INTENSITY, 60).coerceIn(0, 100)
+        neonTransparency = int(KEY_NEON_TRANSPARENCY, 78).coerceIn(0, 100)
         holdDuration = int(KEY_HOLD, 250).coerceIn(150, 1000).toLong()
         edgeWidth = int(KEY_EDGE_WIDTH, 16).coerceIn(8, 32).toFloat()
         movementTolerance = int(KEY_TOLERANCE, 100).coerceIn(50, 200)
@@ -238,7 +240,7 @@ constructor(
             }
         }
         val pie = PieView(windowContext, slices, appIcons, downX, downY, style, surfaceStyle,
-            firstColor, secondColor, glowIntensity, showClock, size / 100f)
+            firstColor, secondColor, glowIntensity, neonTransparency, showClock, size / 100f)
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -341,6 +343,7 @@ constructor(
         private val firstColor: Int,
         private val secondColor: Int,
         private val glowIntensity: Int,
+        private val neonTransparency: Int,
         private val showClock: Boolean,
         scale: Float,
     ) : View(context) {
@@ -541,9 +544,9 @@ constructor(
                 if (neon || color) {
                     val bounds = RectF().also { path.computeBounds(it, true) }
                     val fillFirst = if (neon) (firstColor and 0x00ffffff) or
-                        (minOf(Color.alpha(firstColor), 56) shl 24) else firstColor
+                        (minOf(Color.alpha(firstColor), (100 - neonTransparency) * 255 / 100) shl 24) else firstColor
                     val fillEnd = if (neon) (endColor and 0x00ffffff) or
-                        (minOf(Color.alpha(endColor), 56) shl 24) else endColor
+                        (minOf(Color.alpha(endColor), (100 - neonTransparency) * 255 / 100) shl 24) else endColor
                     segPaint.shader = LinearGradient(bounds.left, 0f, bounds.right.coerceAtLeast(bounds.left + 1f), 0f,
                         fillFirst, fillEnd, Shader.TileMode.CLAMP)
                     segPaint.alpha = 255
@@ -613,6 +616,7 @@ constructor(
         const val KEY_FIRST_COLOR = "pie_first_color"
         const val KEY_SECOND_COLOR = "pie_second_color"
         const val KEY_GLOW_INTENSITY = "pie_glow_intensity"
+        const val KEY_NEON_TRANSPARENCY = "pie_neon_transparency"
         const val KEY_CLOCK = "pie_clock"
         /** 60 to 150, percent. */
         const val KEY_SIZE = "pie_size"
@@ -621,7 +625,7 @@ constructor(
         const val KEY_TOLERANCE = "pie_movement_tolerance"
         private val KEYS = arrayOf(KEY_ENABLED, KEY_EDGES, KEY_ZONE, KEY_ITEMS, KEY_STYLE, KEY_CLOCK,
             KEY_SIZE, KEY_HOLD, KEY_EDGE_WIDTH, KEY_TOLERANCE, KEY_APPS, KEY_APP_ICON_PACK, KEY_APPS_ENABLED,
-            KEY_SURFACE_STYLE, KEY_FIRST_COLOR, KEY_SECOND_COLOR, KEY_GLOW_INTENSITY)
+            KEY_SURFACE_STYLE, KEY_FIRST_COLOR, KEY_SECOND_COLOR, KEY_GLOW_INTENSITY, KEY_NEON_TRANSPARENCY)
 
         private const val EDGES_LEFT = 0
         private const val EDGES_RIGHT = 1

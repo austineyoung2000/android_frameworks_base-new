@@ -303,6 +303,7 @@ private data class PowerTileAppearance(
     val second: Color,
     val useBlur: Boolean,
     val glowIntensity: Int,
+    val neonTransparency: Int,
 )
 
 @Composable
@@ -321,7 +322,9 @@ private fun rememberPowerTileAppearance(): PowerTileAppearance {
             0xff0000ff.toInt(), UserHandle.USER_CURRENT))
         val glow = Settings.System.getIntForUser(resolver, "power_menu_glow_intensity", 60,
             UserHandle.USER_CURRENT).coerceIn(0, 100)
-        PowerTileAppearance(style, effect, first, second, effect in 3..4 && backdrop, glow)
+        val transparency = Settings.System.getIntForUser(resolver, "power_menu_neon_transparency", 78,
+            UserHandle.USER_CURRENT).coerceIn(0, 100)
+        PowerTileAppearance(style, effect, first, second, effect in 3..4 && backdrop, glow, transparency)
     }
 }
 
@@ -330,10 +333,10 @@ private fun PowerTileAppearance.haloModifier(shape: RoundedCornerShape): Modifie
 
 private fun PowerTileAppearance.backgroundModifier(shape: RoundedCornerShape): Modifier {
     if (effect == 0) return Modifier.then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
-    val firstColor = if (effect in 5..6) first.copy(alpha = minOf(first.alpha, 0.22f))
+    val firstColor = if (effect in 5..6) first.copy(alpha = minOf(first.alpha, if (effect in 5..6) (100 - neonTransparency) / 100f else 0.22f))
         else if (useBlur) first.copy(alpha = minOf(first.alpha, 0.63f)) else first
     val last = if (effect == 2 || effect == 4 || effect == 6) second else first
-    val lastColor = if (effect in 5..6) last.copy(alpha = minOf(last.alpha, 0.22f))
+    val lastColor = if (effect in 5..6) last.copy(alpha = minOf(last.alpha, if (effect in 5..6) (100 - neonTransparency) / 100f else 0.22f))
         else if (useBlur) last.copy(alpha = minOf(last.alpha, 0.63f)) else last
     return neonGlowModifier(effect, first, second, glowIntensity, shape)
         .background(Brush.horizontalGradient(listOf(firstColor, lastColor)), shape)
@@ -344,8 +347,8 @@ private fun PowerTileAppearance.backgroundModifier(shape: RoundedCornerShape): M
 private fun PowerTileAppearance.panelBackgroundModifier(shape: RoundedCornerShape): Modifier {
     if (effect == 0) return Modifier
     val last = if (effect == 2 || effect == 4 || effect == 6) second else first
-    val colors = listOf(first.copy(alpha = minOf(first.alpha, 0.22f)),
-            last.copy(alpha = minOf(last.alpha, 0.22f)))
+    val colors = listOf(first.copy(alpha = minOf(first.alpha, if (effect in 5..6) (100 - neonTransparency) / 100f else 0.22f)),
+            last.copy(alpha = minOf(last.alpha, if (effect in 5..6) (100 - neonTransparency) / 100f else 0.22f)))
     return neonGlowModifier(effect, first, second, glowIntensity, shape)
         .background(Brush.horizontalGradient(colors), shape)
         .then(qsTileStyleModifier(style, STATE_ACTIVE, shape))

@@ -58,7 +58,8 @@ public class KeyguardPatternView extends KeyguardInputView
 
     private static final String[] PATTERN_APPEARANCE_KEYS = {
             "rising_pattern_effect", "rising_pattern_style", "rising_pattern_first_color",
-            "rising_pattern_second_color", "rising_pattern_glow_intensity", "rising_pattern_shape"};
+            "rising_pattern_second_color", "rising_pattern_glow_intensity", "rising_pattern_shape",
+            "rising_pattern_neon_transparency"};
     private final ContentObserver mPatternAppearanceObserver = new ContentObserver(
             new Handler(Looper.getMainLooper())) {
         @Override public void onChange(boolean selfChange) { updatePatternAppearance(); }
@@ -78,7 +79,8 @@ public class KeyguardPatternView extends KeyguardInputView
         int second = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[3], 0xff0000ff, UserHandle.USER_CURRENT);
         int intensity = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[4], 60, UserHandle.USER_CURRENT);
         int shape = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[5], 0, UserHandle.USER_CURRENT);
-        mLockPatternView.setRisingPatternAppearance(effect, style, first, second, intensity, shape);
+        int transparency = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[6], 81, UserHandle.USER_CURRENT);
+        mLockPatternView.setRisingPatternAppearance(effect, style, first, second, intensity, shape, transparency);
     }
 
     private static final String TAG = "SecurityPatternView";

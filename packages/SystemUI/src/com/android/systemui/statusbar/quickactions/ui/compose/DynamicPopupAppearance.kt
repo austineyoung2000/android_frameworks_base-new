@@ -34,7 +34,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifie
 
 internal data class DynamicPopupAppearance(
     val mode: Int, val first: Color, val second: Color, val dualColor: Boolean,
-    val outline: Boolean, val intensity: Int, val style: Int,
+    val outline: Boolean, val intensity: Int, val style: Int, val transparency: Int = 80,
 )
 
 @Composable
@@ -52,6 +52,7 @@ internal fun rememberDynamicPopupAppearance(prefix: String): DynamicPopupAppeara
             get("_popup_outline", 0) != 0,
             get("_popup_glow_intensity", 60).coerceIn(0, 100),
             get("_popup_style", 0).coerceIn(0, 7),
+            get("_popup_neon_transparency", 80).coerceIn(0, 100),
         )
     }
     var appearance by remember(context, prefix) { mutableStateOf(read()) }
@@ -60,7 +61,7 @@ internal fun rememberDynamicPopupAppearance(prefix: String): DynamicPopupAppeara
             override fun onChange(selfChange: Boolean) { appearance = read() }
         }
         listOf("_popup_color_mode", "_popup_first_color", "_popup_second_color",
-            "_popup_dual_color", "_popup_outline", "_popup_glow_intensity", "_popup_style").forEach {
+            "_popup_dual_color", "_popup_outline", "_popup_glow_intensity", "_popup_style", "_popup_neon_transparency").forEach {
             resolver.registerContentObserver(Settings.System.getUriFor(prefix + it), false,
                 observer, UserHandle.USER_ALL)
         }
@@ -89,7 +90,7 @@ internal fun DynamicPopupSurface(
     val halo = neonHaloModifier(neonEffect, appearance.first, second, appearance.intensity, shape)
     val edge = neonGlowModifier(neonEffect, appearance.first, second, appearance.intensity, shape)
     val fill = when {
-        neon -> listOf(appearance.first.copy(alpha = .20f), second.copy(alpha = .20f))
+        neon -> listOf(appearance.first.copy(alpha = minOf(appearance.first.alpha, (100 - appearance.transparency) / 100f)), second.copy(alpha = minOf(second.alpha, (100 - appearance.transparency) / 100f)))
         tintedBlur -> listOf(appearance.first.copy(alpha = .35f), second.copy(alpha = .35f))
         else -> listOf(appearance.first, second)
     }

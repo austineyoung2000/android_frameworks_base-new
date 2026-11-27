@@ -1299,14 +1299,17 @@ constructor(
         val actionGlowIntensity = if (useInactiveAction) actionColors.inactiveGlowIntensity
             else actionColors.activeGlowIntensity
         val actionNeon = actionColor != null && actionEffect in 5..6
+        val actionTransparency = if (useInactiveAction) actionColors.inactiveNeonTransparency
+            else actionColors.activeNeonTransparency
+        val actionOpacity = (100 - actionTransparency.coerceIn(0, 100)) / 100f
         val actionShape = RoundedCornerShape(50)
         val actionHalo = neonHaloModifier(actionEffect, actionColor, actionEndColor,
             actionGlowIntensity, actionShape)
         val actionGlow = neonGlowModifier(actionEffect, actionColor, actionEndColor,
             actionGlowIntensity, actionShape)
         val actionBrush = actionColor?.let { start ->
-            val first = if (actionNeon) start.copy(alpha = minOf(start.alpha, 0.22f)) else start
-            val end = if (actionNeon) actionEndColor?.copy(alpha = minOf(actionEndColor.alpha, 0.22f))
+            val first = if (actionNeon) start.copy(alpha = minOf(start.alpha, actionOpacity)) else start
+            val end = if (actionNeon) actionEndColor?.copy(alpha = minOf(actionEndColor.alpha, actionOpacity))
                 else actionEndColor
             if (end != null) Brush.horizontalGradient(listOf(first, end)) else SolidColor(first)
         }
