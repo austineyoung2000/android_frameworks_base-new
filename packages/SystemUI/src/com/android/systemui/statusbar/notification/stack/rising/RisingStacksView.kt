@@ -24,6 +24,8 @@ class RisingStacksView(
     private val row = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        clipChildren = false
+        clipToPadding = false
     }
     private val iconPack = RisingStacksIconPack(context)
     private var lastSelected: RisingStacksModel.AppKey? = null
@@ -40,6 +42,8 @@ class RisingStacksView(
         id = View.generateViewId()
         isHorizontalScrollBarEnabled = false
         isFillViewport = false
+        clipChildren = false
+        clipToPadding = false
         addView(row, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
         visibility = View.GONE
     }
@@ -48,6 +52,7 @@ class RisingStacksView(
         preferredHeightPx = headerHeightPx(state)
         val iconSize = state.iconSize.coerceIn(24, 60)
         val glowSpace = if (state.effect in 3..4) 36 else 0
+        val slotWidth = maxOf(48, iconSize + 8)
         visibility = if (state.visible) View.VISIBLE else View.GONE
         row.removeAllViews()
         if (!state.visible) return
@@ -95,8 +100,8 @@ class RisingStacksView(
                 item.alpha = 0.7f
                 item.animate().alpha(1f).setDuration(90).start()
             }
-            row.addView(item, LinearLayout.LayoutParams(dp(iconSize + 18 + glowSpace), dp(iconSize + 20 + glowSpace)).apply {
-                marginStart = if (index == 0) dp(8) else 0
+            row.addView(item, LinearLayout.LayoutParams(dp(slotWidth), dp(iconSize + 20 + glowSpace)).apply {
+                marginStart = if (index == 0) dp(if (glowSpace > 0) 20 else 8) else 0
                 marginEnd = dp(state.iconSpacing.coerceIn(0, 32))
             })
         }
@@ -113,9 +118,9 @@ class RisingStacksView(
             all.alpha = 0.7f
             all.animate().alpha(1f).setDuration(90).start()
         }
-        row.addView(all, LinearLayout.LayoutParams(dp(maxOf(50, iconSize + 18) + glowSpace), dp(iconSize + 14 + glowSpace)).apply {
-            marginStart = dp(8)
-            marginEnd = dp(6)
+        row.addView(all, LinearLayout.LayoutParams(dp(maxOf(50, slotWidth)), dp(iconSize + 14 + glowSpace)).apply {
+            marginStart = 0
+            marginEnd = dp(if (glowSpace > 0) 20 else 6)
         })
     }
 

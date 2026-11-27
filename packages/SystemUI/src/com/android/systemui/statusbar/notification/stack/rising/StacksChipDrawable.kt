@@ -12,13 +12,14 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import kotlin.math.ceil
 import kotlin.math.min
 
-/** Selected Stacks item appearance; all drawing stays inside the reserved item bounds. */
+/** Selected Stacks item appearance. Neon halos may extend beyond the item's horizontal bounds. */
 internal class StacksChipDrawable(
     private val density: Float,
     private val effect: Int,
@@ -35,8 +36,13 @@ internal class StacksChipDrawable(
     private val pad get() = if (effect == 3 || effect == 4) 18f * density else 0f
 
     override fun draw(canvas: Canvas) {
-        val b = bounds
-        if (b.isEmpty) return
+        if (bounds.isEmpty) return
+        val b = Rect(bounds)
+        // Keep the glow outside the hit target instead of widening every icon slot.
+        if (effect == 3 || effect == 4) {
+            val horizontalGlow = (18f * density + 0.5f).toInt()
+            b.inset(-horizontalGlow, 0)
+        }
         val rect = RectF(b.left + pad, b.top + pad, b.right - pad, b.bottom - pad)
         if (rect.isEmpty) return
         val radius = min(16f * density, min(rect.width(), rect.height()) / 2f)
