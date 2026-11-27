@@ -745,7 +745,11 @@ internal fun qsTileBackgroundModifier(
             // Remove the region from the window aggregator before the composable disappears.
             old.setVisible(false, false)
             old.setBlurRadius(0)
+            old.setBounds(0, 0, 0, 0)
             if (blur === old) blur = null
+            // The scene can remain composed while hidden; force the host to redraw without
+            // the released cross-window blur region.
+            view.invalidate()
         }
 
         fun updateSupport(enabled: Boolean) {

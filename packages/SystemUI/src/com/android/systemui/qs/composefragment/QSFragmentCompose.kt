@@ -863,14 +863,22 @@ constructor(
         ) {
             scene(QuickSettings, alwaysCompose = true) {
                 LaunchedEffect(Unit) { viewModel.onQSOpen() }
-                Element(QuickSettings.rootElementKey, Modifier) { QuickSettingsElement(oneUiTileStore) }
+                val transition = sceneState.transitionState
+                val blurVisible = LocalQsTileBlurVisible.current &&
+                    transition is TransitionState.Idle && transition.currentScene == QuickSettings
+                CompositionLocalProvider(LocalQsTileBlurVisible provides blurVisible) {
+                    Element(QuickSettings.rootElementKey, Modifier) { QuickSettingsElement(oneUiTileStore) }
+                }
             }
 
             scene(QuickQuickSettings, alwaysCompose = true) {
                 LaunchedEffect(Unit) { viewModel.onQQSOpen() }
-                // Cannot pass the element modifier in because the top element has a `testTag`
-                // and this would overwrite it.
-                Element(QuickQuickSettings.rootElementKey, Modifier) { QuickQuickSettingsElement() }
+                // Compact tiles use the shaped fallback and must never own expanded blur regions.
+                CompositionLocalProvider(LocalQsTileBlurVisible provides false) {
+                    // Cannot pass the element modifier in because the top element has a `testTag`
+                    // and this would overwrite it.
+                    Element(QuickQuickSettings.rootElementKey, Modifier) { QuickQuickSettingsElement() }
+                }
             }
 
             scene(SceneKeys.EditMode) {
