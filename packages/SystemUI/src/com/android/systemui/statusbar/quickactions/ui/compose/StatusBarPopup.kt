@@ -296,7 +296,8 @@ fun StatusBarPopup(
                         it is PopupContentModel.ScreenRecord ||
                         it is PopupContentModel.Flashlight
                 })
-        val skipMotionOnDismiss = colorMode == POPUP_COLOR_MODE_BLUR || glassCard
+        val skipMotionOnDismiss = colorMode == POPUP_COLOR_MODE_BLUR ||
+            colorMode in 5..6 || glassCard
 
         // The card grows out of where the chip was, so it waits for its own bounds.
         val cosReady = cos && popupBoundsInScreen != null

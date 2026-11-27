@@ -23,6 +23,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
@@ -93,6 +94,20 @@ private class PopupBlurHost(context: Context, private val cornerRadiusPx: Float)
 }
 
 @Composable
+internal fun PopupBlurBackground(modifier: Modifier = Modifier, radius: Dp = 32.dp) {
+    val density = LocalDensity.current
+    AndroidView(
+        factory = { context ->
+            PopupBlurHost(context, with(density) { radius.toPx() }).also {
+                it.layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            }
+        },
+        modifier = modifier,
+    )
+}
+
+@Composable
 fun rememberPopupColorMode(): Int {
     val context = LocalContext.current
     val initial = remember(context) { context.contentResolver.readDynamicIslandPopupColorMode() }
@@ -122,18 +137,34 @@ fun PopupSurface(
         } else content()
     }
     if (LocalIslandPopupContentOnly.current) {
-        val contentColor = if (colorMode in 2..4) customContentColor
+        val contentColor = if (colorMode in 2..6) customContentColor
             else MaterialTheme.colorScheme.onSurface
         CompositionLocalProvider(LocalContentColor provides contentColor) {
             Box(modifier, propagateMinConstraints = true) { animatedContent() }
         }
         return
     }
-    if (colorMode in 2..4) {
+    if (colorMode in 2..6 || appearance.style != 0) {
         val rounded = surfaceShape as? RoundedCornerShape
             ?: RoundedCornerShape(DynamicIslandMotion.CardCornerRadius)
-        DynamicPopupSurface(appearance = appearance, shape = rounded, modifier = modifier) {
-            CompositionLocalProvider(LocalContentColor provides customContentColor) {
+        val radius = if (islandMotion) DynamicIslandMotion.CardCornerRadius else 32.dp
+        DynamicPopupSurface(
+            appearance = appearance.copy(mode = colorMode.coerceIn(0, 6)),
+            shape = rounded,
+            modifier = modifier,
+            nativeBackground = {
+                if (colorMode == POPUP_COLOR_MODE_BLUR) {
+                    PopupBlurBackground(Modifier.matchParentSize(), radius)
+                } else {
+                    Box(Modifier.matchParentSize().background(
+                        MaterialTheme.colorScheme.surfaceContainerHigh, rounded))
+                }
+            },
+            blurBackground = { PopupBlurBackground(Modifier.matchParentSize(), radius) },
+        ) {
+            CompositionLocalProvider(LocalContentColor provides
+                if (colorMode in 2..6) customContentColor
+                else MaterialTheme.colorScheme.onSurface) {
                 animatedContent()
             }
         }

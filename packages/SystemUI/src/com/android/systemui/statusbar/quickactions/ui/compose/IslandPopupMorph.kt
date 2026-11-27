@@ -151,6 +151,7 @@ internal fun IslandPopupMorph(
     val density = LocalDensity.current
     val view = LocalView.current
     val popupMode = rememberPopupColorMode()
+    val appearance = rememberDynamicPopupAppearance("status_bar_dynamic_island")
     val margin = with(density) { (if (popupMode in 3..4) 32.dp else 12.dp).roundToPx() }
     val gap = with(density) { 8.dp.toPx() }
     val cornerRadius = with(density) { DynamicIslandMotion.CardCornerRadius.toPx() }
@@ -348,18 +349,20 @@ internal fun IslandPopupMorph(
                     val radius = minOf(cornerRadius, size.height / 2f, size.width / 2f)
                     drawRoundRect(Color(0xFF0E0E10), cornerRadius = CornerRadius(radius),
                         alpha = 1f - surfaceReveal)
-                    val rimAlpha = 0.4f + 0.6f * expansion
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(listOf(
-                            Color.White.copy(alpha = 56f / 255f * rimAlpha),
-                            Color.White.copy(alpha = 15f / 255f * rimAlpha),
-                        )),
-                        topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f),
-                        size = Size((size.width - strokeWidth).coerceAtLeast(0f),
-                            (size.height - strokeWidth).coerceAtLeast(0f)),
-                        cornerRadius = CornerRadius(radius),
-                        style = Stroke(strokeWidth),
-                    )
+                    if (popupMode in 0..1 && appearance.style == 0 && !appearance.outline) {
+                        val rimAlpha = 0.4f + 0.6f * expansion
+                        drawRoundRect(
+                            brush = Brush.verticalGradient(listOf(
+                                Color.White.copy(alpha = 56f / 255f * rimAlpha),
+                                Color.White.copy(alpha = 15f / 255f * rimAlpha),
+                            )),
+                            topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f),
+                            size = Size((size.width - strokeWidth).coerceAtLeast(0f),
+                                (size.height - strokeWidth).coerceAtLeast(0f)),
+                            cornerRadius = CornerRadius(radius),
+                            style = Stroke(strokeWidth),
+                        )
+                    }
                 }
             }, propagateMinConstraints = true) {
                 if (geometry != null) {

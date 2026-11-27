@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
 import android.provider.Settings
+import android.service.quicksettings.Tile.STATE_ACTIVE
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -29,10 +30,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonGlowModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonHaloModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
 
 internal data class DynamicPopupAppearance(
     val mode: Int, val first: Color, val second: Color, val dualColor: Boolean,
-    val outline: Boolean, val intensity: Int,
+    val outline: Boolean, val intensity: Int, val style: Int,
 )
 
 @Composable
@@ -43,12 +45,13 @@ internal fun rememberDynamicPopupAppearance(prefix: String): DynamicPopupAppeara
         fun get(suffix: String, fallback: Int) = Settings.System.getIntForUser(
             resolver, prefix + suffix, fallback, UserHandle.USER_CURRENT)
         return DynamicPopupAppearance(
-            get("_popup_color_mode", 0).coerceIn(0, 4),
+            get("_popup_color_mode", 0).coerceIn(0, 6),
             Color(get("_popup_first_color", android.graphics.Color.BLACK)),
             Color(get("_popup_second_color", android.graphics.Color.BLUE)),
             get("_popup_dual_color", 0) != 0,
             get("_popup_outline", 0) != 0,
             get("_popup_glow_intensity", 60).coerceIn(0, 100),
+            get("_popup_style", 0).coerceIn(0, 7),
         )
     }
     var appearance by remember(context, prefix) { mutableStateOf(read()) }
@@ -57,7 +60,7 @@ internal fun rememberDynamicPopupAppearance(prefix: String): DynamicPopupAppeara
             override fun onChange(selfChange: Boolean) { appearance = read() }
         }
         listOf("_popup_color_mode", "_popup_first_color", "_popup_second_color",
-            "_popup_dual_color", "_popup_outline", "_popup_glow_intensity").forEach {
+            "_popup_dual_color", "_popup_outline", "_popup_glow_intensity", "_popup_style").forEach {
             resolver.registerContentObserver(Settings.System.getUriFor(prefix + it), false,
                 observer, UserHandle.USER_ALL)
         }
@@ -74,30 +77,39 @@ internal fun DynamicPopupSurface(
     shape: RoundedCornerShape,
     modifier: Modifier = Modifier,
     nativeBackground: @Composable BoxScope.() -> Unit = {},
+    blurBackground: @Composable BoxScope.() -> Unit = { nativeBackground() },
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val custom = appearance.mode in 2..4
+    val custom = appearance.mode in 2..6
     val neon = appearance.mode in 3..4
-    val second = if (appearance.mode == 4 || appearance.mode == 2 && appearance.dualColor)
-        appearance.second else appearance.first
+    val tintedBlur = appearance.mode in 5..6
+    val second = if (appearance.mode == 4 || appearance.mode == 6 ||
+        appearance.mode == 2 && appearance.dualColor) appearance.second else appearance.first
     val neonEffect = if (appearance.mode == 4) 6 else if (neon) 5 else 0
     val halo = neonHaloModifier(neonEffect, appearance.first, second, appearance.intensity, shape)
     val edge = neonGlowModifier(neonEffect, appearance.first, second, appearance.intensity, shape)
-    val fill = if (neon) listOf(appearance.first.copy(alpha = .20f), second.copy(alpha = .20f))
-        else listOf(appearance.first, second)
+    val fill = when {
+        neon -> listOf(appearance.first.copy(alpha = .20f), second.copy(alpha = .20f))
+        tintedBlur -> listOf(appearance.first.copy(alpha = .35f), second.copy(alpha = .35f))
+        else -> listOf(appearance.first, second)
+    }
     Box(modifier.then(halo), propagateMinConstraints = true) {
-        Box(Modifier.matchParentSize().clip(shape).then(
-            if (custom) Modifier.background(Brush.horizontalGradient(fill)) else Modifier
-        ).then(edge).then(
+        Box(Modifier.matchParentSize().clip(shape).then(edge).then(
             if (appearance.outline) Modifier.border(1.dp,
                 if (custom) appearance.first else Color.White.copy(alpha = .7f), shape)
             else Modifier
         )) {
             if (!custom) nativeBackground()
+            if (tintedBlur) blurBackground()
+            if (custom) Box(Modifier.matchParentSize().background(Brush.horizontalGradient(fill)))
+        }
+        if (appearance.style != 0) {
+            Box(Modifier.matchParentSize().clip(shape).then(
+                qsTileStyleModifier(appearance.style, STATE_ACTIVE, shape)))
         }
         Box(Modifier.clip(shape), propagateMinConstraints = true) {
             if (custom) {
-                val text = if (!neon && (appearance.first.luminance() + second.luminance()) / 2f > .5f)
+                val text = if (!neon && !tintedBlur && (appearance.first.luminance() + second.luminance()) / 2f > .5f)
                     Color.Black else Color.White
                 MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
                     onSurface = text, onSurfaceVariant = text.copy(alpha = .78f))) {
