@@ -110,10 +110,6 @@ constructor(
                     (clockBottom + gap - baseTop).coerceAtLeast(0f) else 0f
                 positionAdjustmentApplied = widget.translationY != 0f
             } else if (positionAdjustmentApplied) {
-                    widget.translationY = 0f
-                    positionAdjustmentApplied = false
-                }
-            } else if (positionAdjustmentApplied) {
                 widget.translationY = 0f
                 positionAdjustmentApplied = false
             }
