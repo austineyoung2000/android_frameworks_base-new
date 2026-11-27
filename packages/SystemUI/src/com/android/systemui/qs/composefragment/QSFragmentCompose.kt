@@ -246,6 +246,7 @@ import com.android.systemui.qs.panels.shared.model.QSLayoutItem
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.FullScreenTilePicker
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQqsGlassBlurVisible
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQsTileBlurVisible
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonHaloModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonGlowModifier
@@ -606,7 +607,11 @@ constructor(
                                 LocalQsTileBlurVisible provides
                                     (viewModel.isQsVisibleAndAnyShadeExpanded &&
                                         !viewModel.showingMirror &&
-                                        viewModel.panelExpansionFraction >= 0.995f)
+                                        viewModel.panelExpansionFraction >= 0.995f),
+                                LocalQqsGlassBlurVisible provides
+                                    (viewModel.isQsVisibleAndAnyShadeExpanded &&
+                                        !viewModel.showingMirror &&
+                                        viewModel.panelExpansionFraction <= 0.005f)
                             ) {
                                 CollapsableQuickSettingsSTL(oneUiTileStore)
                             }
