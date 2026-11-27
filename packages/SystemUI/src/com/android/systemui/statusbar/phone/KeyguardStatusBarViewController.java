@@ -117,6 +117,8 @@ import javax.inject.Inject;
 public class KeyguardStatusBarViewController extends ViewController<KeyguardStatusBarView>
         implements TunerService.Tunable {
 
+    private static final String HIDE_LOCKSCREEN_STATUS_BAR =
+            "system:hide_lockscreen_status_bar";
     private static final String STATUSBAR_EXTRA_PADDING_START =
             "system:" + Settings.System.STATUSBAR_EXTRA_PADDING_START;
     private static final String STATUSBAR_EXTRA_PADDING_TOP =
@@ -285,6 +287,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
                 @Override
                 public void onStateChanged(int newState) {
                     mStatusBarState = newState;
+                    updateLockscreenStatusBarHidden();
                 }
             };
 
@@ -333,6 +336,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
      */
     private boolean mDelayShowingKeyguardStatusBar;
     private int mStatusBarState;
+    private boolean mHideLockscreenStatusBar;
     private boolean mDozing;
     private StatusBarSystemEventDefaultAnimator mSystemEventAnimator;
     private float mSystemEventAnimatorAlpha = 1;
@@ -519,6 +523,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
                 false,
                 mVolumeSettingObserver,
                 UserHandle.USER_ALL);
+        mTunerService.addTunable(this, HIDE_LOCKSCREEN_STATUS_BAR);
         mTunerService.addTunable(this, STATUSBAR_EXTRA_PADDING_START);
         mTunerService.addTunable(this, STATUSBAR_EXTRA_PADDING_TOP);
         mTunerService.addTunable(this, STATUSBAR_EXTRA_PADDING_END);
@@ -607,6 +612,10 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
     @Override
     public void onTuningChanged(String key, String newValue) {
         switch (key) {
+            case HIDE_LOCKSCREEN_STATUS_BAR:
+                mHideLockscreenStatusBar = TunerService.parseIntegerSwitch(newValue, false);
+                updateLockscreenStatusBarHidden();
+                break;
             case STATUSBAR_EXTRA_PADDING_START:
             case STATUSBAR_EXTRA_PADDING_TOP:
             case STATUSBAR_EXTRA_PADDING_END:
@@ -616,6 +625,10 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
             default:
                 break;
          }
+    }
+
+    private void updateLockscreenStatusBarHidden() {
+        mView.setLockscreenStatusBarHidden(mHideLockscreenStatusBar && mStatusBarState == KEYGUARD);
     }
 
     /** Should be called when the theme changes. */

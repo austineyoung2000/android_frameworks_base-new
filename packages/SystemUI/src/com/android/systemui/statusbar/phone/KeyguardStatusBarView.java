@@ -116,6 +116,8 @@ public class KeyguardStatusBarView extends RelativeLayout {
     private final Rect mClipRect = new Rect(0, 0, 0, 0);
     private boolean mIsUserSwitcherEnabled;
 
+    private boolean mHideLockscreenStatusBar;
+    private int mRequestedVisibility = View.VISIBLE;
     private int mStatusBarExtraPaddingStart = 0;
     private int mStatusBarExtraPaddingTop = 0;
     private int mStatusBarExtraPaddingEnd = 0;
@@ -127,6 +129,7 @@ public class KeyguardStatusBarView extends RelativeLayout {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
+        mRequestedVisibility = getVisibility();
         mSystemIconsContainer = findViewById(R.id.system_icons_container);
         mSystemIcons = findViewById(R.id.system_icons);
         mMultiUserAvatar = findViewById(R.id.multi_user_avatar);
@@ -440,8 +443,21 @@ public class KeyguardStatusBarView extends RelativeLayout {
         return mKeyguardUserAvatarEnabled;
     }
 
+    /** Hide the lockscreen bar without changing its layout bounds or the shade status bar. */
+    public void setLockscreenStatusBarHidden(boolean hidden) {
+        if (mHideLockscreenStatusBar == hidden) return;
+        mHideLockscreenStatusBar = hidden;
+        applyRequestedVisibility();
+    }
+
     @Override
     public void setVisibility(int visibility) {
+        mRequestedVisibility = visibility;
+        applyRequestedVisibility();
+    }
+
+    private void applyRequestedVisibility() {
+        final int visibility = mHideLockscreenStatusBar ? View.INVISIBLE : mRequestedVisibility;
         super.setVisibility(visibility);
         if (visibility != View.VISIBLE) {
             mSystemIconsContainer.animate().cancel();
