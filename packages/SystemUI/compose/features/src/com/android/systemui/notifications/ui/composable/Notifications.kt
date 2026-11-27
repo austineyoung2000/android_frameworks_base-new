@@ -181,18 +181,26 @@ fun ContentScope.ConstrainedNotificationStack(
     val density = LocalDensity.current
     var availableHeightPx by remember { mutableIntStateOf(0) }
     var widgetLimitPx by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    var infoWidgetInsetPx by remember { mutableIntStateOf(0) }
     var viewportTopPx by remember { mutableIntStateOf(Int.MIN_VALUE) }
     val widgetGapPx = with(density) { 8.dp.roundToPx() }
     val fingerprintGapPx = with(density) { 12.dp.roundToPx() }
     DisposableEffect(rootView, stacksActive) {
         val observer = rootView.viewTreeObserver
         val listener = ViewTreeObserver.OnPreDrawListener {
-            val widgets = listOf(R.id.keyguard_info_widgets, R.id.keyguard_widgets,
-                R.id.keyguard_app_widgets).mapNotNull { rootView.findViewById<View>(it) }
+            val widgets = listOf(R.id.keyguard_widgets, R.id.keyguard_app_widgets)
+                .mapNotNull { rootView.findViewById<View>(it) }
                 .filter { it.isShown && it.alpha > 0f && it.height > 0 }
             val location = IntArray(2)
             var limit = Int.MAX_VALUE
+            var inset = 0
             if (stacksActive && viewportTopPx != Int.MIN_VALUE) {
+                val info = rootView.findViewById<View>(R.id.keyguard_info_widgets)
+                if (info != null && info.isShown && info.alpha > 0f && info.height > 0) {
+                    info.getLocationInWindow(location)
+                    inset = (location[1] + info.height + widgetGapPx - viewportTopPx)
+                        .coerceAtLeast(0)
+                }
                 widgets.forEach { widget ->
                     widget.getLocationInWindow(location)
                     val top = location[1] - viewportTopPx
@@ -201,6 +209,7 @@ fun ContentScope.ConstrainedNotificationStack(
                 }
             }
             if (widgetLimitPx != limit) widgetLimitPx = limit
+            if (infoWidgetInsetPx != inset) infoWidgetInsetPx = inset
             true
         }
         if (observer.isAlive) observer.addOnPreDrawListener(listener)
@@ -244,11 +253,12 @@ fun ContentScope.ConstrainedNotificationStack(
             Box(
                 modifier =
                     Modifier.fillMaxWidth()
+                        .padding(top = with(density) { infoWidgetInsetPx.toDp() })
                         .heightIn(
                             max = if (availableHeightPx > 0) {
                                 with(density) {
                                     (minOf(availableHeightPx, widgetLimitPx) -
-                                        fingerprintGapPx).coerceAtLeast(0).toDp()
+                                        infoWidgetInsetPx - fingerprintGapPx).coerceAtLeast(0).toDp()
                                 }
                             } else Dp.Unspecified
                         )

@@ -81,17 +81,67 @@ constructor(
         val widgetLocation = IntArray(2)
         val rowLocation = IntArray(2)
         val gap = (8f * context.resources.displayMetrics.density + 0.5f).toInt()
+        // Restore Rising's original anchor when returning to doze or when the clock bounds vanish.
+        var originalTopToTop: Int? = null
+        var originalTopToBottom = ConstraintLayout.LayoutParams.UNSET
+        var originalTopMargin = 0
         val listener = ViewTreeObserver.OnPreDrawListener {
             val root = constraintLayout.rootView
             val ambientPeek = statusBarStateController.isDozing &&
                 Settings.System.getIntForUser(context.contentResolver, "ambient_peek_enabled", 0,
                     ActivityManager.getCurrentUser()) != 0
+            val params = widget.layoutParams as? ConstraintLayout.LayoutParams
+            var clockWindowBottom = (root.getTag(R.id.ambient_peek_clock_bottom) as? Float) ?: -1f
+            if (clockWindowBottom <= 0f && !statusBarStateController.isDozing) {
+                val clockLocation = IntArray(2)
+                for (id in intArrayOf(R.id.clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE)) {
+                    val clock = root.findViewById<View>(id) ?: continue
+                    if (!clock.isShown || clock.alpha <= 0f || clock.height <= 0 ||
+                        clock.height >= root.height * 0.6f) continue
+                    clock.getLocationInWindow(clockLocation)
+                    clockWindowBottom = maxOf(clockWindowBottom,
+                        clockLocation[1] + clock.height * clock.scaleY)
+                }
+            }
+            if (!statusBarStateController.isDozing && widget.isShown && params != null &&
+                clockWindowBottom > 0f) {
+                val parentLocation = IntArray(2)
+                constraintLayout.getLocationInWindow(parentLocation)
+                val mediaBottom = (root.getTag(R.id.rising_widgets_media_bottom) as? Float) ?: -1f
+                val anchorBottom = maxOf(clockWindowBottom, mediaBottom)
+                val targetMargin = (anchorBottom - parentLocation[1] + gap).toInt().coerceAtLeast(0)
+                val currentLocation = IntArray(2)
+                widget.getLocationInWindow(currentLocation)
+                val needsAdjustment = originalTopToTop != null ||
+                    currentLocation[1] < anchorBottom + gap
+                if (needsAdjustment) {
+                    if (originalTopToTop == null) {
+                        originalTopToTop = params.topToTop
+                        originalTopToBottom = params.topToBottom
+                        originalTopMargin = params.topMargin
+                    }
+                    if (params.topToTop != ConstraintSet.PARENT_ID ||
+                        params.topToBottom != ConstraintLayout.LayoutParams.UNSET ||
+                        params.topMargin != targetMargin) {
+                        params.topToTop = ConstraintSet.PARENT_ID
+                        params.topToBottom = ConstraintLayout.LayoutParams.UNSET
+                        params.topMargin = targetMargin
+                        widget.layoutParams = params
+                    }
+                }
+            } else if (params != null && originalTopToTop != null) {
+                params.topToTop = originalTopToTop!!
+                params.topToBottom = originalTopToBottom
+                params.topMargin = originalTopMargin
+                widget.layoutParams = params
+                originalTopToTop = null
+            }
             if (widget.isShown && ambientPeek) {
                 val location = IntArray(2)
                 val windowLocation = IntArray(2)
                 root.getLocationOnScreen(location)
                 root.getLocationInWindow(windowLocation)
-                val clockWindowBottom = (root.getTag(R.id.ambient_peek_clock_bottom) as? Float) ?: -1f
                 var clockBottom = if (clockWindowBottom > 0f)
                     (clockWindowBottom + location[1] - windowLocation[1]).toInt() else 0
                 for (id in intArrayOf(R.id.clock_ls, R.id.aod_ls,

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <item type="id" name="ambient_peek_clock_bottom" />
+    <item type="id" name="rising_widgets_media_bottom" />
     <item type="id" name="rising_stacks_media_visible" />
 </resources>

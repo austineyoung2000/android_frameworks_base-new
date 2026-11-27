@@ -169,9 +169,15 @@ constructor(
                 val widgetClockBottom = listOf(largeClockBottom, largeDateWeatherBottom,
                     smallClockBottom, smallDateWeatherBottom, smartspaceBottom)
                     .filter { it > 0f }.maxOrNull() ?: -1f
-                SideEffect { windowRoot.setTag(R.id.ambient_peek_clock_bottom, widgetClockBottom) }
+                SideEffect {
+                    windowRoot.setTag(R.id.ambient_peek_clock_bottom, widgetClockBottom)
+                    windowRoot.setTag(R.id.rising_widgets_media_bottom, mediaBottom)
+                }
                 DisposableEffect(windowRoot) {
-                    onDispose { windowRoot.setTag(R.id.ambient_peek_clock_bottom, null) }
+                    onDispose {
+                        windowRoot.setTag(R.id.ambient_peek_clock_bottom, null)
+                        windowRoot.setTag(R.id.rising_widgets_media_bottom, null)
+                    }
                 }
 
                 val indicationAreaTop by
