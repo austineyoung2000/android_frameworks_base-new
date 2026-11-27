@@ -44,6 +44,23 @@ import com.android.systemui.shade.ui.ShadeColors
 /** Scrim for QS/Shade, this will fill the max size, so it should be inside a Box like layout. */
 @Composable
 fun ContentScope.ShadePanelScrim(isTransparencyEnabled: Boolean, modifier: Modifier = Modifier) {
+    val transparency = rememberQsBackgroundTransparency()
+    // This is the background for the whole scene, as the elements don't necessarily provide
+    // a background that extends to the edges.
+    Spacer(
+        modifier =
+            modifier
+                .element(Shade.Elements.BackgroundScrim)
+                .fillMaxSize()
+                .background(color = scrimColor(isTransparencyEnabled).let {
+                    it.copy(alpha = it.alpha * (100 - transparency) / 100f)
+                })
+    )
+}
+
+/** User transparency for shade background layers, excluding cards and tile content. */
+@Composable
+internal fun rememberQsBackgroundTransparency(): Int {
     val context = LocalContext.current
     val resolver = context.contentResolver
     fun readTransparency() = Settings.System.getIntForUser(
@@ -69,17 +86,7 @@ fun ContentScope.ShadePanelScrim(isTransparencyEnabled: Boolean, modifier: Modif
             context.unregisterReceiver(userSwitch)
         }
     }
-    // This is the background for the whole scene, as the elements don't necessarily provide
-    // a background that extends to the edges.
-    Spacer(
-        modifier =
-            modifier
-                .element(Shade.Elements.BackgroundScrim)
-                .fillMaxSize()
-                .background(color = scrimColor(isTransparencyEnabled).let {
-                    it.copy(alpha = it.alpha * (100 - transparency) / 100f)
-                })
-    )
+    return transparency
 }
 
 @Composable

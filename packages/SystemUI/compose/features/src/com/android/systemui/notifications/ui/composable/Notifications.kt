@@ -116,6 +116,7 @@ import com.android.systemui.scene.session.ui.composable.SaveableSession
 import com.android.systemui.scene.session.ui.composable.sessionCoroutineScope
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shade.ui.ShadeColors
+import com.android.systemui.shade.ui.composable.rememberQsBackgroundTransparency
 import com.android.systemui.statusbar.notification.shared.NsslTouchDispatchFix
 import com.android.systemui.statusbar.notification.stack.shared.model.AccessibilityScrollEvent
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimBounds
@@ -507,6 +508,7 @@ fun ContentScope.NestedScrollingNotificationPanel(
     val density = LocalDensity.current
     val screenCornerRadius = LocalScreenCornerRadius.current
     val scrimCornerRadius = dimensionResource(R.dimen.notification_scrim_corner_radius)
+    val qsBackgroundTransparency = rememberQsBackgroundTransparency()
     val classicShadeNotificationScrimBgColor =
         Color(
             ShadeColors.classicShadeNotificationScrimBg(
@@ -517,7 +519,9 @@ fun ContentScope.NestedScrollingNotificationPanel(
                 // same color as  in the shade types where we are NOT punching a hole.
                 composited = shouldPunchHoleBehindScrim,
             )
-        )
+        ).let { color ->
+            color.copy(alpha = color.alpha * (100 - qsBackgroundTransparency) / 100f)
+        }
     val expansionFraction by viewModel.expandFraction.collectAsStateWithLifecycle(0f)
     val screenHeight = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
