@@ -142,7 +142,7 @@ constructor(
         edges = int(KEY_EDGES, EDGES_BOTH)
         zone = int(KEY_ZONE, ZONE_LOWER)
         style = int(KEY_STYLE, STYLE_CLASSIC).coerceIn(STYLE_NEON, STYLE_DUAL_COLOR)
-        surfaceStyle = int(KEY_SURFACE_STYLE, 0).coerceIn(0, 7)
+        surfaceStyle = if (style == STYLE_CLASSIC) int(KEY_SURFACE_STYLE, 0).coerceIn(0, 7) else 0
         firstColor = int(KEY_FIRST_COLOR, 0xff6200ee.toInt())
         secondColor = int(KEY_SECOND_COLOR, 0xff0000ff.toInt())
         glowIntensity = int(KEY_GLOW_INTENSITY, 60).coerceIn(0, 100)

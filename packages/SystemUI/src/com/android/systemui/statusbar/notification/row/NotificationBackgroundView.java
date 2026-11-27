@@ -154,8 +154,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 "notification_card_glow_intensity", 60, UserHandle.USER_CURRENT)));
         mCardNeonTransparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(resolver,
                 "notification_card_neon_transparency", 78, UserHandle.USER_CURRENT)));
-        mCardStyle = Settings.System.getIntForUser(resolver,
-                "notification_card_style", 0, UserHandle.USER_CURRENT);
+        mCardStyle = mCardColorMode == 0 ? Settings.System.getIntForUser(resolver,
+                "notification_card_style", 0, UserHandle.USER_CURRENT) : 0;
         if (getParent() instanceof ActivatableNotificationView) {
             ((ActivatableNotificationView) getParent()).onBackgroundGlowChanged();
         }

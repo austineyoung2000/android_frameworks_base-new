@@ -74,7 +74,7 @@ public class KeyguardPatternView extends KeyguardInputView
         if (mLockPatternView == null) return;
         var r = getContext().getContentResolver();
         int effect = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[0], 0, UserHandle.USER_CURRENT);
-        int style = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[1], 0, UserHandle.USER_CURRENT);
+        int style = effect == 0 ? Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[1], 0, UserHandle.USER_CURRENT) : 0;
         int first = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[2], 0xff6200ee, UserHandle.USER_CURRENT);
         int second = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[3], 0xff0000ff, UserHandle.USER_CURRENT);
         int intensity = Settings.System.getIntForUser(r, PATTERN_APPEARANCE_KEYS[4], 60, UserHandle.USER_CURRENT);

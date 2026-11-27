@@ -49,9 +49,9 @@ internal fun rememberDynamicPopupAppearance(prefix: String): DynamicPopupAppeara
             Color(get("_popup_first_color", android.graphics.Color.BLACK)),
             Color(get("_popup_second_color", android.graphics.Color.BLUE)),
             get("_popup_dual_color", 0) != 0,
-            get("_popup_outline", 0) != 0,
+            get("_popup_outline", 0) != 0 && get("_popup_color_mode", 0) == 0 && get("_popup_style", 0) == 0,
             get("_popup_glow_intensity", 60).coerceIn(0, 100),
-            get("_popup_style", 0).coerceIn(0, 7),
+            if (get("_popup_color_mode", 0) == 0) get("_popup_style", 0).coerceIn(0, 7) else 0,
             get("_popup_neon_transparency", 80).coerceIn(0, 100),
         )
     }

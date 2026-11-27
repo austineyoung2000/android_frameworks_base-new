@@ -84,7 +84,7 @@ internal class StacksChipDrawable(
         paint.alpha = fillAlpha * alphaValue / 255
         canvas.drawPath(path, paint)
         paint.shader = null
-        if (outline || neon && intensity > 0) {
+        if (outline && effect == 0 || neon && intensity > 0) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = density
             if (effect == 0) paint.color = 0xaaffffff.toInt()

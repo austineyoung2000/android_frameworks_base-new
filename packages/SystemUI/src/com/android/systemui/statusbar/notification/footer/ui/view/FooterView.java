@@ -389,8 +389,8 @@ public class FooterView extends StackScrollerDecorView {
 
         int colorMode = Settings.System.getIntForUser(mContext.getContentResolver(),
                 "notification_card_color_mode", 0, UserHandle.USER_CURRENT);
-        int cardStyle = Settings.System.getIntForUser(mContext.getContentResolver(),
-                "notification_card_style", 0, UserHandle.USER_CURRENT);
+        int cardStyle = colorMode == 0 ? Settings.System.getIntForUser(mContext.getContentResolver(),
+                "notification_card_style", 0, UserHandle.USER_CURRENT) : 0;
         int buttonContentColor = onSurface;
         int neonFirst = Color.MAGENTA;
         int neonSecond = Color.BLUE;

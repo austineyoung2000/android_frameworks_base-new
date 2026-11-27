@@ -62,14 +62,16 @@ internal fun rememberBrightnessAppearance(): BrightnessAppearance {
         fun color(key: String, default: Int) =
             Color(Settings.System.getIntForUser(resolver, key, default, UserHandle.USER_CURRENT))
         val fillEnabled = enabled("qs_brightness_color_enabled")
-        val effect = Settings.System.getIntForUser(resolver, "qs_brightness_color_effect", 0,
-            UserHandle.USER_CURRENT).coerceIn(0, 2)
+        val configuredEffect = Settings.System.getIntForUser(resolver, "qs_brightness_color_effect", 0,
+            UserHandle.USER_CURRENT).coerceIn(0, 3)
+        val effect = if (configuredEffect == 0 && fillEnabled &&
+            enabled("qs_brightness_gradient_enabled")) 3 else configuredEffect
         return BrightnessAppearance(
-            style = Settings.System.getIntForUser(
+            style = if (effect == 0) Settings.System.getIntForUser(
                 resolver, "qs_brightness_style", 0, UserHandle.USER_CURRENT
-            ).coerceIn(0, 7),
+            ).coerceIn(0, 7) else 0,
             fill = if (fillEnabled || effect != 0) color("qs_brightness_color", 0xff6200ee.toInt()) else null,
-            end = if (effect == 2 || (effect == 0 && fillEnabled && enabled("qs_brightness_gradient_enabled")))
+            end = if (effect == 2 || effect == 3)
                 color("qs_brightness_gradient_end_color", 0xff0000ff.toInt()) else null,
             track = if (enabled("qs_brightness_track_color_enabled"))
                 color("qs_brightness_track_color", 0xff0000ff.toInt()) else null,
@@ -128,8 +130,8 @@ internal fun Modifier.brightnessAppearance(
     val path = Path().apply { addRoundRect(rect) }
     val rawFill = appearance.fill ?: defaultFill
     val rawTrack = appearance.track ?: defaultTrack
-    val fill = if (appearance.effect != 0) rawFill.copy(alpha = minOf(rawFill.alpha, (100 - appearance.neonTransparency) / 100f)) else rawFill
-    val track = if (appearance.effect != 0) rawTrack.copy(alpha = minOf(rawTrack.alpha, (100 - appearance.neonTransparency) / 100f)) else rawTrack
+    val fill = if (appearance.effect in 1..2) rawFill.copy(alpha = minOf(rawFill.alpha, (100 - appearance.neonTransparency) / 100f)) else rawFill
+    val track = if (appearance.effect in 1..2) rawTrack.copy(alpha = minOf(rawTrack.alpha, (100 - appearance.neonTransparency) / 100f)) else rawTrack
     val progress = fraction.coerceIn(0f, 1f)
     clipPath(path) {
         drawRect(track, topLeft = Offset(left, top), size = Size(width, height))
@@ -140,7 +142,7 @@ internal fun Modifier.brightnessAppearance(
             bottom = top + height,
         ) {
             val rawEnd = appearance.end
-            val end = if (appearance.effect != 0) rawEnd?.copy(alpha = minOf(rawEnd.alpha, (100 - appearance.neonTransparency) / 100f)) else rawEnd
+            val end = if (appearance.effect in 1..2) rawEnd?.copy(alpha = minOf(rawEnd.alpha, (100 - appearance.neonTransparency) / 100f)) else rawEnd
             if (end == null) {
                 drawRect(fill, topLeft = Offset(left, top), size = Size(width, height))
             } else {
@@ -197,7 +199,7 @@ internal fun Modifier.brightnessNeon(
     vertical: Boolean,
     defaultFill: Color,
 ): Modifier {
-    if (appearance.effect == 0 || appearance.glowIntensity <= 0) return this
+    if (appearance.effect !in 1..2 || appearance.glowIntensity <= 0) return this
     val strength = appearance.glowIntensity.coerceIn(0, 100) / 100f
     val first = appearance.fill ?: defaultFill
     val second = if (appearance.effect == 2) appearance.end ?: first else first

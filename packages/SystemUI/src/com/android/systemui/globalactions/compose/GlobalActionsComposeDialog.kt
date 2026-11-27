@@ -324,7 +324,7 @@ private fun rememberPowerTileAppearance(): PowerTileAppearance {
             UserHandle.USER_CURRENT).coerceIn(0, 100)
         val transparency = Settings.System.getIntForUser(resolver, "power_menu_neon_transparency", 78,
             UserHandle.USER_CURRENT).coerceIn(0, 100)
-        PowerTileAppearance(style, effect, first, second, effect in 3..4 && backdrop, glow, transparency)
+        PowerTileAppearance(if (effect == 0) style else 0, effect, first, second, effect in 3..4 && backdrop, glow, transparency)
     }
 }
 

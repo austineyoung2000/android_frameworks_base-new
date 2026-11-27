@@ -161,6 +161,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonHaloModi
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileSelectedStyle
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.SectionEditModeViewModel
 import com.android.systemui.qs.pipeline.domain.model.TileModel
@@ -2129,7 +2130,7 @@ fun DraggableTile(
                         .then(qsTileNeonModifier(customTileColors, visualState, RoundedCornerShape(InactiveCornerRadius)))
                         .then(qsTileBackgroundModifier(customTileColors, visualState, RoundedCornerShape(InactiveCornerRadius)))
                         .then(qsTileStyleModifier(
-                            customTileColors.tileStyle, visualState, RoundedCornerShape(InactiveCornerRadius)
+                            qsTileSelectedStyle(customTileColors, visualState), visualState, RoundedCornerShape(InactiveCornerRadius)
                         ))
                         .combinedClickable(
                             enabled = !isEditMode && interactionsEnabled,
@@ -2251,7 +2252,7 @@ fun DraggableTile(
                                 modifier = Modifier.fillMaxSize()
                                     .clip(RoundedCornerShape(percent = 50))
                                     .then(qsTileStyleModifier(
-                                        customTileColors.tileStyle, visualState,
+                                        qsTileSelectedStyle(customTileColors, visualState), visualState,
                                         RoundedCornerShape(percent = 50)
                                     ))
                                     .combinedClickable(

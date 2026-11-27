@@ -35,7 +35,7 @@ final class PinKeyAppearance {
         second = Settings.System.getIntForUser(r, KEYS[3], 0xff0000ff, UserHandle.USER_CURRENT);
         digit = Settings.System.getIntForUser(r, KEYS[4], Color.WHITE, UserHandle.USER_CURRENT);
         intensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(r, KEYS[5], 60, UserHandle.USER_CURRENT)));
-        style = Math.max(0, Math.min(7, Settings.System.getIntForUser(r, KEYS[6], 0, UserHandle.USER_CURRENT)));
+        style = effect == 0 ? Math.max(0, Math.min(7, Settings.System.getIntForUser(r, KEYS[6], 0, UserHandle.USER_CURRENT))) : 0;
         transparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(r, KEYS[7], 78, UserHandle.USER_CURRENT)));
         halo = null;
     }
@@ -54,7 +54,7 @@ final class PinKeyAppearance {
                 prefix + "_glow_intensity", 60, UserHandle.USER_CURRENT)));
         transparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(r,
                 prefix + "_neon_transparency", 78, UserHandle.USER_CURRENT)));
-        style = hasStyle ? Math.max(0, Math.min(7, Settings.System.getIntForUser(r,
+        style = hasStyle && effect == 0 ? Math.max(0, Math.min(7, Settings.System.getIntForUser(r,
                 prefix + "_style", 0, UserHandle.USER_CURRENT))) : 0;
         halo = null;
     }
@@ -72,7 +72,7 @@ final class PinKeyAppearance {
         if (!enabled() || w <= 0 || h <= 0 || w > 1024 || h > 1024 || density <= 0) return;
         float inset = Math.min(Math.min(w, h) * .08f, 4f * density);
         RectF rect = new RectF(inset, inset, w - inset, h - inset);
-        int displayShape = shapeOverride >= 0 ? shapeOverride : effect == 0 ? 0 : shape;
+        int displayShape = shapeOverride >= 0 ? shapeOverride : effect == 0 && style == 0 ? 0 : shape;
         float radius = displayShape == 2 ? 3f * density : displayShape == 1 ? 14f * density
                 : displayShape == 3 ? Math.min(rect.width(), rect.height()) * .30f
                 : Math.min(rect.width(), rect.height()) * .5f;

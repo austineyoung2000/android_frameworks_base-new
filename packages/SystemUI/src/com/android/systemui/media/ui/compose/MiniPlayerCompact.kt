@@ -53,6 +53,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabe
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileUsesNeon
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileSelectedStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonHaloModifier
 
@@ -121,7 +122,7 @@ fun MiniPlayerCompact(
                 .then(if (notificationAppearance) Modifier else
                     qsTileBackgroundModifier(tileSettings, tileState, shape))
                 .then(if (notificationAppearance) Modifier else
-                    qsTileStyleModifier(tileSettings.tileStyle, tileState, shape))
+                    qsTileStyleModifier(qsTileSelectedStyle(tileSettings, tileState), tileState, shape))
                 .then(if (notificationAppearance) Modifier else
                     qsTileNeonModifier(tileSettings, tileState, shape))
         ) {

@@ -402,7 +402,7 @@ fun ContentScope.Tile(
                 isDualTarget = uiState.handlesToggleClick,
                 modifier = contentRevealModifier
                     .then(qsTileBackgroundModifier(labelColors, uiState.visualState, tileShape))
-                    .then(qsTileStyleModifier(labelColors.tileStyle, uiState.visualState, tileShape))
+                    .then(qsTileStyleModifier(qsTileSelectedStyle(labelColors, uiState.visualState), uiState.visualState, tileShape))
                     .then(qsTileGlassModifier(labelColors, uiState.visualState, tileShape))
                     .then(qsTileNeonModifier(labelColors, uiState.visualState, tileShape)),
             ) {
@@ -598,8 +598,20 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
         fun rawColor(key: String, fallback: Int) = Color(Settings.System.getIntForUser(resolver, key, fallback, UserHandle.USER_CURRENT))
         fun effect(kind: String): Int {
             val configured = Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_effect", -1, UserHandle.USER_CURRENT)
-            if (configured in 0..8) return configured
-            if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_color_enabled", 0, UserHandle.USER_CURRENT) == 0) return 0
+            if (configured in 9..15) return configured
+            if (configured in 0..8) {
+                if (configured != 0) return configured
+                // Until Personalizations migrates the old global style, retain it for
+                // states which previously used the native background.
+                val oldStyle = Settings.System.getIntForUser(
+                    resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT
+                )
+                return if (oldStyle in 1..7) oldStyle + 8 else 0
+            }
+            if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_color_enabled", 0, UserHandle.USER_CURRENT) == 0) {
+                val oldStyle = Settings.System.getIntForUser(resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT)
+                return if (oldStyle in 1..7) oldStyle + 8 else 0
+            }
             return if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_gradient_enabled", 0, UserHandle.USER_CURRENT) != 0) 2 else 1
         }
         return CustomLabelColors(
@@ -621,9 +633,9 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             tileStyle = Settings.System.getIntForUser(
                 resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT
             ),
-            activeBackground = if (effect("active") == 0) null else rawColor("qs_active_background_color", 0xff6200ee.toInt()),
+            activeBackground = if (effect("active") !in 1..8) null else rawColor("qs_active_background_color", 0xff6200ee.toInt()),
             activeGradientEnd = if (effect("active") in listOf(2, 4, 6)) rawColor("qs_active_gradient_end_color", 0xff0000ff.toInt()) else null,
-            inactiveBackground = if (effect("inactive") == 0) null else rawColor("qs_inactive_background_color", 0xff55555f.toInt()),
+            inactiveBackground = if (effect("inactive") !in 1..8) null else rawColor("qs_inactive_background_color", 0xff55555f.toInt()),
             inactiveGradientEnd = if (effect("inactive") in listOf(2, 4, 6)) rawColor("qs_inactive_gradient_end_color", 0xff0000ff.toInt()) else null,
             activeEffect = effect("active"),
             inactiveEffect = effect("inactive"),
@@ -696,6 +708,16 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
 internal val LocalQsTileBlurVisible = staticCompositionLocalOf { false }
 
 /** Neon uses a translucent tint; an opaque stock surface underneath defeats it. */
+/** Each active/inactive appearance selects either a style or a background effect. */
+internal fun qsTileSelectedStyle(settings: CustomLabelColors, state: Int): Int {
+    val selected = when (state) {
+        STATE_ACTIVE -> settings.activeEffect
+        STATE_INACTIVE -> settings.inactiveEffect
+        else -> 0
+    }
+    return if (selected in 9..15) selected - 8 else 0
+}
+
 internal fun qsTileUsesNeon(settings: CustomLabelColors, state: Int): Boolean =
     when (state) {
         STATE_ACTIVE -> settings.activeEffect in 5..6 && settings.activeBackground != null
