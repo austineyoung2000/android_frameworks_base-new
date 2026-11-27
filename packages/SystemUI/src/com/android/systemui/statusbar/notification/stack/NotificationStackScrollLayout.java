@@ -495,6 +495,8 @@ public class NotificationStackScrollLayout
     private boolean mBackwardScrollable;
     private NotificationShelf mShelf;
     private boolean mRisingStacksActive;
+    // True for a gesture which began on a scrollable Stacks notification.
+    private boolean mRisingStacksLegacyScrollGesture;
     private int mRisingStacksHeaderHeightPx;
     private String mRisingStacksPackage;
     private int mRisingStacksUserId = UserHandle.USER_NULL;
@@ -2847,8 +2849,20 @@ public class NotificationStackScrollLayout
             final int[] location = new int[2];
             getLocationOnScreen(location);
             final int viewportBottom = getRisingStacksViewportBottomOnScreen() - location[1];
-            return Math.max(0, getContentHeight() + getRisingStacksHeaderHeight()
-                    - viewportBottom);
+            int contentBottom = getContentHeight() + getRisingStacksHeaderHeight();
+            // Expanded groups can be taller than the stack calculator's constrained height.
+            // Include their actual on-screen extent so their lower actions remain reachable.
+            final int[] childLocation = new int[2];
+            for (int i = 0; i < getChildCount(); i++) {
+                final View child = getChildAt(i);
+                if (!(child instanceof ExpandableNotificationRow row)
+                        || !isRisingStacksPreviewRow(row) || !row.isShown()
+                        || row.getAlpha() <= 0f || !row.isLaidOut()) continue;
+                row.getLocationOnScreen(childLocation);
+                contentBottom = Math.max(contentBottom, childLocation[1] - location[1]
+                        + row.getActualHeight() + getOwnScrollY());
+            }
+            return Math.max(0, contentBottom - viewportBottom);
         }
         // In current design, it only use the top HUN to treat all of HUNs
         // although there are more than one HUNs
@@ -3993,6 +4007,13 @@ public class NotificationStackScrollLayout
      * @return Whether a y coordinate is inside the content.
      */
     public boolean isInContentBounds(float y) {
+        if (!SceneContainerFlag.isEnabled() && mRisingStacksActive
+                && isMotoCompactDesignActive()) {
+            final int[] location = new int[2];
+            getLocationOnScreen(location);
+            return y >= mAmbientState.getStackY() + getRisingStacksHeaderHeight()
+                    && y < getRisingStacksViewportBottomOnScreen() - location[1];
+        }
         if (isLockscreenNotificationLayoutActive()
                 && mStackScrollAlgorithm.getLockscreenNotificationStack().getBottom() > 0f) {
             return y < mStackScrollAlgorithm.getLockscreenNotificationStack().getBottom();
@@ -4021,6 +4042,26 @@ public class NotificationStackScrollLayout
      * @param ev A MotionEvent that's dispatched to the NSSL
      * @return True when the NSSL wants to prevent its descendants to get the MotionEvent.
      */
+    /** Whether this motion belongs to the legacy lockscreen Stacks scroller. */
+    boolean isRisingStacksLegacyScrollGesture() {
+        return mRisingStacksLegacyScrollGesture;
+    }
+
+    private void beginRisingStacksScrollGesture(MotionEvent ev) {
+        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return;
+        mRisingStacksLegacyScrollGesture = false;
+        if (SceneContainerFlag.isEnabled() || !mRisingStacksActive
+                || !isMotoCompactDesignActive() || getScrollRange() <= 0
+                || !isInScrollableRegion(ev)) return;
+        final ExpandableView child = getChildAtPosition(
+                ev.getX(), ev.getY(), false, false, true);
+        if (!(child instanceof ExpandableNotificationRow)
+                || !isRisingStacksPreviewRow(child)) return;
+        mRisingStacksLegacyScrollGesture = true;
+        // Keep a vertical drag inside the cards from becoming a lockscreen unlock gesture.
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+    }
+
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         if (SceneContainerFlag.isEnabled()) {
@@ -4178,6 +4219,7 @@ public class NotificationStackScrollLayout
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        beginRisingStacksScrollGesture(ev);
         closeMotoCompactPreviewIfOutsideTouch(ev);
         final boolean collapseStack = handleLockscreenStackCollapseTouch(ev);
         MotionEvent dispatchedEvent = ev;
@@ -4193,6 +4235,9 @@ public class NotificationStackScrollLayout
             if (dispatchedEvent != ev) {
                 dispatchedEvent.recycle();
             }
+            if (ev.getActionMasked() == ACTION_UP || ev.getActionMasked() == ACTION_CANCEL) {
+                mRisingStacksLegacyScrollGesture = false;
+            }
         }
         if (collapseStack && mController != null && !mController.isFalseStackTap()) {
             setLockscreenNotificationStackExpanded(false);
@@ -4202,7 +4247,7 @@ public class NotificationStackScrollLayout
     }
 
     private boolean dispatchTouchEventToSceneAndChildren(MotionEvent ev) {
-        if (NsslTouchDispatchFix.isEnabled()) {
+        if (NsslTouchDispatchFix.isEnabled() && !mRisingStacksLegacyScrollGesture) {
             // IMPORTANT: Dispatch to super first to handle standard touch routing.
             // This triggers side effects on subsequent events (like ACTION_MOVE), potentially
             // mutating mGestureReachedScroller to true, or calling claimTouchFromSceneFramework.
@@ -4487,7 +4532,9 @@ public class NotificationStackScrollLayout
     }
 
     boolean onScrollTouch(MotionEvent ev) {
-        NsslTouchDispatchFix.assertInLegacyMode();
+        if (!mRisingStacksLegacyScrollGesture) {
+            NsslTouchDispatchFix.assertInLegacyMode();
+        }
         if (!isScrollingEnabled()) {
             return false;
         }
