@@ -572,6 +572,8 @@ internal data class CustomLabelColors(
     val inactiveEffect: Int,
     val activeGlowIntensity: Int,
     val inactiveGlowIntensity: Int,
+    val activeNeonTransparency: Int = 78,
+    val inactiveNeonTransparency: Int = 78,
     val activeGlassTintIntensity: Int = 35,
     val inactiveGlassTintIntensity: Int = 20,
     val activeGlassSoftness: Int = 60,
@@ -625,6 +627,8 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             inactiveEffect = effect("inactive"),
             activeGlowIntensity = Settings.System.getIntForUser(resolver, "qs_active_glow_intensity", 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
             inactiveGlowIntensity = Settings.System.getIntForUser(resolver, "qs_inactive_glow_intensity", 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
+            activeNeonTransparency = Settings.System.getIntForUser(resolver, "qs_active_neon_transparency", 78, UserHandle.USER_CURRENT).coerceIn(0, 100),
+            inactiveNeonTransparency = Settings.System.getIntForUser(resolver, "qs_inactive_neon_transparency", 78, UserHandle.USER_CURRENT).coerceIn(0, 100),
             activeGlassTintIntensity = Settings.System.getIntForUser(resolver, "qs_active_" + (if (effect("active") == 8) "liquid" else "frosted") + "_glass_tint", 35, UserHandle.USER_CURRENT).coerceIn(0, 100),
             activeGlassSoftness = Settings.System.getIntForUser(resolver, "qs_active_" + (if (effect("active") == 8) "liquid" else "frosted") + "_glass_softness", if (effect("active") == 8) 20 else 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
             inactiveGlassTintIntensity = Settings.System.getIntForUser(resolver, "qs_inactive_" + (if (effect("inactive") == 8) "liquid" else "frosted") + "_glass_tint", 20, UserHandle.USER_CURRENT).coerceIn(0, 100),
@@ -648,6 +652,7 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_tile_shape", "qs_compose_tile_style",
             "qs_active_background_effect", "qs_inactive_background_effect",
             "qs_active_glow_intensity", "qs_inactive_glow_intensity",
+            "qs_active_neon_transparency", "qs_inactive_neon_transparency",
             "qs_active_frosted_glass_tint", "qs_inactive_frosted_glass_tint",
             "qs_active_liquid_glass_tint", "qs_inactive_liquid_glass_tint",
             "qs_active_frosted_glass_softness", "qs_inactive_frosted_glass_softness",
@@ -813,8 +818,11 @@ internal fun qsTileBackgroundModifier(
             else settings.inactiveGlassTintIntensity
         val glassAlpha = (glassTint.coerceIn(0, 100) / 100f) *
             (if (effect == 7) 0.45f else 0.50f)
+        val neonTransparency = if (state == STATE_ACTIVE) settings.activeNeonTransparency
+            else settings.inactiveNeonTransparency
+        val neonOpacity = (100 - neonTransparency.coerceIn(0, 100)) / 100f
         val first = when {
-            effect in 5..6 -> start.copy(alpha = minOf(start.alpha, 0.22f))
+            effect in 5..6 -> start.copy(alpha = minOf(start.alpha, neonOpacity))
             effect in 7..8 && drewBlur -> start.copy(alpha = minOf(start.alpha, glassAlpha))
             // Background blur can be unsupported or unavailable while QS is transitioning.
             effect in 7..8 -> {
@@ -829,7 +837,7 @@ internal fun qsTileBackgroundModifier(
             drewBlur -> start.copy(alpha = minOf(start.alpha, 0.63f))
             else -> start
         }
-        val last = if (effect in 5..6) end?.copy(alpha = minOf(end.alpha, 0.22f))
+        val last = if (effect in 5..6) end?.copy(alpha = minOf(end.alpha, neonOpacity))
             else if (drewBlur) end?.copy(alpha = minOf(end.alpha, 0.63f)) else end
         if (last != null) drawRect(brush = Brush.horizontalGradient(listOf(first, last)))
         else drawRect(color = first)
