@@ -863,25 +863,14 @@ constructor(
         ) {
             scene(QuickSettings, alwaysCompose = true) {
                 LaunchedEffect(Unit) { viewModel.onQSOpen() }
-                val transition = sceneState.transitionState
-                val blurVisible = LocalQsTileBlurVisible.current && viewModel.isNotTransitioning &&
-                    transition is TransitionState.Idle && transition.currentScene == QuickSettings
-                CompositionLocalProvider(LocalQsTileBlurVisible provides blurVisible) {
-                    Element(QuickSettings.rootElementKey, Modifier) { QuickSettingsElement(oneUiTileStore) }
-                }
+                Element(QuickSettings.rootElementKey, Modifier) { QuickSettingsElement(oneUiTileStore) }
             }
 
             scene(QuickQuickSettings, alwaysCompose = true) {
                 LaunchedEffect(Unit) { viewModel.onQQSOpen() }
-                // The compact scene owns blur only while it is the settled visible scene.
-                val transition = sceneState.transitionState
-                val blurVisible = LocalQsTileBlurVisible.current && viewModel.isNotTransitioning &&
-                    transition is TransitionState.Idle && transition.currentScene == QuickQuickSettings
-                CompositionLocalProvider(LocalQsTileBlurVisible provides blurVisible) {
-                    // Cannot pass the element modifier in because the top element has a `testTag`
-                    // and this would overwrite it.
-                    Element(QuickQuickSettings.rootElementKey, Modifier) { QuickQuickSettingsElement() }
-                }
+                // Cannot pass the element modifier in because the top element has a `testTag`
+                // and this would overwrite it.
+                Element(QuickQuickSettings.rootElementKey, Modifier) { QuickQuickSettingsElement() }
             }
 
             scene(SceneKeys.EditMode) {

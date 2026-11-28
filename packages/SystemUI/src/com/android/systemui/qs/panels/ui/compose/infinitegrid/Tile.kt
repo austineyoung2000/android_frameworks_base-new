@@ -403,7 +403,6 @@ fun ContentScope.Tile(
                 modifier = contentRevealModifier
                     .then(qsTileBackgroundModifier(labelColors, uiState.visualState, tileShape))
                     .then(qsTileStyleModifier(qsTileSelectedStyle(labelColors, uiState.visualState), uiState.visualState, tileShape))
-                    .then(qsTileGlassModifier(labelColors, uiState.visualState, tileShape))
                     .then(qsTileNeonModifier(labelColors, uiState.visualState, tileShape)),
             ) {
                 val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
@@ -574,12 +573,6 @@ internal data class CustomLabelColors(
     val inactiveGlowIntensity: Int,
     val activeNeonTransparency: Int = 78,
     val inactiveNeonTransparency: Int = 78,
-    val activeGlassTintIntensity: Int = 35,
-    val inactiveGlassTintIntensity: Int = 20,
-    val activeGlassSoftness: Int = 60,
-    val inactiveGlassSoftness: Int = 60,
-    val activeGlassTransparency: Int = 0,
-    val inactiveGlassTransparency: Int = 0,
 )
 
 @Composable
@@ -598,8 +591,10 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
         fun rawColor(key: String, fallback: Int) = Color(Settings.System.getIntForUser(resolver, key, fallback, UserHandle.USER_CURRENT))
         fun effect(kind: String): Int {
             val configured = Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_effect", -1, UserHandle.USER_CURRENT)
+            // Previously selected glass effects use the stock tile.
+            if (configured in 7..8) return 0
             if (configured in 9..15) return configured
-            if (configured in 0..8) {
+            if (configured in 0..6) {
                 if (configured != 0) return configured
                 // Until Personalizations migrates the old global style, retain it for
                 // states which previously used the native background.
@@ -633,9 +628,9 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             tileStyle = Settings.System.getIntForUser(
                 resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT
             ),
-            activeBackground = if (effect("active") !in 1..8) null else rawColor("qs_active_background_color", 0xff6200ee.toInt()),
+            activeBackground = if (effect("active") !in 1..6) null else rawColor("qs_active_background_color", 0xff6200ee.toInt()),
             activeGradientEnd = if (effect("active") in listOf(2, 4, 6)) rawColor("qs_active_gradient_end_color", 0xff0000ff.toInt()) else null,
-            inactiveBackground = if (effect("inactive") !in 1..8) null else rawColor("qs_inactive_background_color", 0xff55555f.toInt()),
+            inactiveBackground = if (effect("inactive") !in 1..6) null else rawColor("qs_inactive_background_color", 0xff55555f.toInt()),
             inactiveGradientEnd = if (effect("inactive") in listOf(2, 4, 6)) rawColor("qs_inactive_gradient_end_color", 0xff0000ff.toInt()) else null,
             activeEffect = effect("active"),
             inactiveEffect = effect("inactive"),
@@ -643,12 +638,6 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             inactiveGlowIntensity = Settings.System.getIntForUser(resolver, "qs_inactive_glow_intensity", 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
             activeNeonTransparency = Settings.System.getIntForUser(resolver, "qs_active_neon_transparency", 78, UserHandle.USER_CURRENT).coerceIn(0, 100),
             inactiveNeonTransparency = Settings.System.getIntForUser(resolver, "qs_inactive_neon_transparency", 78, UserHandle.USER_CURRENT).coerceIn(0, 100),
-            activeGlassTintIntensity = Settings.System.getIntForUser(resolver, "qs_active_" + (if (effect("active") == 8) "liquid" else "frosted") + "_glass_tint", 35, UserHandle.USER_CURRENT).coerceIn(0, 100),
-            activeGlassSoftness = Settings.System.getIntForUser(resolver, "qs_active_" + (if (effect("active") == 8) "liquid" else "frosted") + "_glass_softness", if (effect("active") == 8) 20 else 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
-            activeGlassTransparency = Settings.System.getIntForUser(resolver, "qs_active_" + (if (effect("active") == 8) "liquid" else "frosted") + "_glass_transparency", 0, UserHandle.USER_CURRENT).coerceIn(0, 100),
-            inactiveGlassTintIntensity = Settings.System.getIntForUser(resolver, "qs_inactive_" + (if (effect("inactive") == 8) "liquid" else "frosted") + "_glass_tint", 20, UserHandle.USER_CURRENT).coerceIn(0, 100),
-            inactiveGlassSoftness = Settings.System.getIntForUser(resolver, "qs_inactive_" + (if (effect("inactive") == 8) "liquid" else "frosted") + "_glass_softness", if (effect("inactive") == 8) 20 else 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
-            inactiveGlassTransparency = Settings.System.getIntForUser(resolver, "qs_inactive_" + (if (effect("inactive") == 8) "liquid" else "frosted") + "_glass_transparency", 0, UserHandle.USER_CURRENT).coerceIn(0, 100),
         )
     }
     val colors = remember(context) { mutableStateOf(readColors()) }
@@ -669,12 +658,6 @@ internal fun rememberCustomLabelColors(): CustomLabelColors {
             "qs_active_background_effect", "qs_inactive_background_effect",
             "qs_active_glow_intensity", "qs_inactive_glow_intensity",
             "qs_active_neon_transparency", "qs_inactive_neon_transparency",
-            "qs_active_frosted_glass_tint", "qs_inactive_frosted_glass_tint",
-            "qs_active_liquid_glass_tint", "qs_inactive_liquid_glass_tint",
-            "qs_active_frosted_glass_softness", "qs_inactive_frosted_glass_softness",
-            "qs_active_liquid_glass_softness", "qs_inactive_liquid_glass_softness",
-            "qs_active_frosted_glass_transparency", "qs_inactive_frosted_glass_transparency",
-            "qs_active_liquid_glass_transparency", "qs_inactive_liquid_glass_transparency",
             "qs_active_background_color_enabled", "qs_active_background_color",
             "qs_active_gradient_enabled", "qs_active_gradient_end_color",
             "qs_inactive_background_color_enabled", "qs_inactive_background_color",
@@ -727,8 +710,8 @@ internal fun qsTileUsesNeon(settings: CustomLabelColors, state: Int): Boolean =
 
 internal fun qsTileUsesBlur(settings: CustomLabelColors, state: Int): Boolean =
     when (state) {
-        STATE_ACTIVE -> settings.activeEffect in 3..4 || settings.activeEffect in 7..8
-        STATE_INACTIVE -> settings.inactiveEffect in 3..4 || settings.inactiveEffect in 7..8
+        STATE_ACTIVE -> settings.activeEffect in 3..4
+        STATE_INACTIVE -> settings.inactiveEffect in 3..4
         else -> false
     }
 
@@ -748,15 +731,12 @@ internal fun qsTileBackgroundModifier(
         STATE_INACTIVE -> settings.inactiveGradientEnd
         else -> null
     }
-    val selectedEffect = if (state == STATE_ACTIVE) settings.activeEffect else settings.inactiveEffect
     val wantsBlur = start != null && qsTileUsesBlur(settings, state) &&
         LocalQsTileBlurVisible.current
     val view = LocalView.current
-    val glassSoftness = if (state == STATE_ACTIVE) settings.activeGlassSoftness else settings.inactiveGlassSoftness
-    val glassRadius = with(LocalDensity.current) { (40f * glassSoftness / 100f).dp.roundToPx() }
     var blur by remember(view) { mutableStateOf<BackgroundBlurDrawable?>(null) }
     var blurSupported by remember(view) { mutableStateOf(false) }
-    DisposableEffect(view, wantsBlur, selectedEffect, glassRadius) {
+    DisposableEffect(view, wantsBlur) {
         val listeners = CrossWindowBlurListeners.getInstance()
         var disposed = false
         var ownedBlur: BackgroundBlurDrawable? = null
@@ -787,8 +767,7 @@ internal fun qsTileBackgroundModifier(
                 val created = v.viewRootImpl?.createBackgroundBlurDrawable() ?: return
                 // Start hidden: a tile may be detached or the shade closed before its first draw.
                 created.setVisible(false, false)
-                created.setBlurRadius(if (selectedEffect in 7..8) glassRadius else
-                    v.resources.getDimensionPixelSize(R.dimen.notification_background_blur_radius))
+                created.setBlurRadius(v.resources.getDimensionPixelSize(R.dimen.notification_background_blur_radius))
                 created.setColor(android.graphics.Color.TRANSPARENT)
                 ownedBlur = created
                 blur = created
@@ -845,21 +824,11 @@ internal fun qsTileBackgroundModifier(
             }
         }
         val effect = if (state == STATE_ACTIVE) settings.activeEffect else settings.inactiveEffect
-        val glassTint = if (state == STATE_ACTIVE) settings.activeGlassTintIntensity
-            else settings.inactiveGlassTintIntensity
-        val glassAlpha = (glassTint.coerceIn(0, 100) / 100f) *
-            (if (effect == 7) 0.45f else 0.50f)
-        val glassTransparency = if (state == STATE_ACTIVE) settings.activeGlassTransparency
-            else settings.inactiveGlassTransparency
-        val glassOpacity = (100 - glassTransparency.coerceIn(0, 100)) / 100f
         val neonTransparency = if (state == STATE_ACTIVE) settings.activeNeonTransparency
             else settings.inactiveNeonTransparency
         val neonOpacity = (100 - neonTransparency.coerceIn(0, 100)) / 100f
         val first = when {
             effect in 5..6 -> start.copy(alpha = minOf(start.alpha, neonOpacity))
-            // Keep the same translucent tint during transitions and when blur is
-            // unavailable; never replace glass with an opaque fallback surface.
-            effect in 7..8 -> start.copy(alpha = minOf(start.alpha, glassAlpha) * glassOpacity)
             drewBlur -> start.copy(alpha = minOf(start.alpha, 0.63f))
             else -> start
         }
@@ -867,97 +836,6 @@ internal fun qsTileBackgroundModifier(
             else if (drewBlur) end?.copy(alpha = minOf(end.alpha, 0.63f)) else end
         if (last != null) drawRect(brush = Brush.horizontalGradient(listOf(first, last)))
         else drawRect(color = first)
-    }
-}
-
-/**
- * ColorOS-inspired glass highlights are drawn inside the current tile shape. The liquid
- * variant adds a clearer fill and a stronger curved rim; it does not sample or refract
- * the underlying window.
- */
-internal fun qsTileGlassModifier(
-    settings: CustomLabelColors,
-    state: Int,
-    shape: RoundedCornerShape,
-): Modifier {
-    val effect = when (state) {
-        STATE_ACTIVE -> settings.activeEffect
-        STATE_INACTIVE -> settings.inactiveEffect
-        else -> 0
-    }
-    if (effect !in 7..8) return Modifier
-    return Modifier.drawWithCache {
-        val outline = shape.createOutline(size, layoutDirection, this)
-        val path = Path()
-        when (outline) {
-            is Outline.Rounded -> path.addRoundRect(outline.roundRect)
-            is Outline.Rectangle -> path.addRect(outline.rect)
-            is Outline.Generic -> path.addPath(outline.path)
-        }
-        val liquid = effect == 8
-        val sheen = Brush.verticalGradient(
-            0f to Color.White.copy(alpha = if (liquid) 0.24f else 0.14f),
-            0.24f to Color.White.copy(alpha = if (liquid) 0.06f else 0.04f),
-            0.55f to Color.Transparent,
-            0.85f to (if (liquid) Color.Black.copy(alpha = 0.09f) else Color.Transparent),
-            1f to (if (liquid) Color.Black.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.02f)),
-        )
-        val rim = Brush.linearGradient(
-            0f to Color.White.copy(alpha = if (liquid) 0.70f else 0.40f),
-            0.35f to Color.White.copy(alpha = if (liquid) 0.14f else 0.08f),
-            0.70f to Color.White.copy(alpha = if (liquid) 0.12f else 0.06f),
-            1f to Color.White.copy(alpha = if (liquid) 0.55f else 0.28f),
-        )
-        // Soft, shape-clipped bands suggest the curved highlights of a water surface.
-        // These are decorative paths, not live backdrop refraction.
-        val waterTop = Path().apply {
-            // On compact/square tiles move the shine into the curved shape instead of
-            // clipping the large-tile highlight entirely outside a circular edge.
-            val top = if (size.width <= size.height * 1.2f) 0.19f else 0.10f
-            moveTo(0f, size.height * top)
-            cubicTo(size.width * 0.22f, size.height * (top - 0.08f),
-                size.width * 0.38f, size.height * (top + 0.08f),
-                size.width * 0.61f, size.height * (top - 0.02f))
-            cubicTo(size.width * 0.78f, size.height * (top - 0.08f),
-                size.width * 0.91f, size.height * (top + 0.02f),
-                size.width, size.height * (top - 0.02f))
-            lineTo(size.width, 0f)
-            lineTo(0f, 0f)
-            close()
-        }
-        val waterBottom = Path().apply {
-            val bottom = if (size.width <= size.height * 1.2f) 0.73f else 0.79f
-            moveTo(0f, size.height * bottom)
-            cubicTo(size.width * 0.23f, size.height * (bottom - 0.08f),
-                size.width * 0.37f, size.height * (bottom + 0.15f),
-                size.width * 0.60f, size.height * (bottom + 0.04f))
-            cubicTo(size.width * 0.78f, size.height * (bottom - 0.03f),
-                size.width * 0.90f, size.height * (bottom + 0.13f),
-                size.width, size.height * (bottom + 0.05f))
-            lineTo(size.width, size.height)
-            lineTo(0f, size.height)
-            close()
-        }
-        val waterHighlight = Brush.verticalGradient(
-            0f to Color.White.copy(alpha = 0.30f),
-            0.22f to Color.White.copy(alpha = 0.04f),
-            1f to Color.Transparent,
-        )
-        val waterDepth = Brush.verticalGradient(
-            0f to Color.Transparent,
-            0.75f to Color.White.copy(alpha = 0.04f),
-            1f to Color.White.copy(alpha = 0.18f),
-        )
-        onDrawBehind {
-            clipPath(path) {
-                drawRect(brush = sheen)
-                if (liquid) {
-                    drawPath(waterTop, brush = waterHighlight)
-                    drawPath(waterBottom, brush = waterDepth)
-                }
-                drawPath(path, brush = rim, style = Stroke((if (liquid) 2f else 1f).dp.toPx()))
-            }
-        }
     }
 }
 
