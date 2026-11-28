@@ -20,6 +20,8 @@ import static android.provider.Settings.System.SHOW_BATTERY_PERCENT;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.ContentObserver;
+import android.graphics.Color;
+import android.os.UserHandle;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerExecutor;
@@ -62,6 +64,17 @@ public class BatteryMeterViewController extends ViewController<BatteryMeterView>
     private final SettingObserver mSettingObserver;
     private final UserTracker mUserTracker;
     private final StatusBarLocation mLocation;
+    private static final String SYSTEM_ICON_COLOR_ENABLED = "status_bar_system_icon_color_enabled";
+    private static final String SYSTEM_ICON_COLOR = "status_bar_system_icon_color";
+    private final TunerService.Tunable mColorTunable = (key, value) -> updateCustomIconColor();
+
+    private void updateCustomIconColor() {
+        boolean enabled = Settings.System.getIntForUser(mContentResolver,
+                SYSTEM_ICON_COLOR_ENABLED, 0, UserHandle.USER_CURRENT) != 0;
+        int color = Settings.System.getIntForUser(mContentResolver,
+                SYSTEM_ICON_COLOR, Color.WHITE, UserHandle.USER_CURRENT);
+        mView.setCustomStatusBarColor(enabled, color);
+    }
 
     private final ConfigurationController.ConfigurationListener mConfigurationListener =
             new ConfigurationController.ConfigurationListener() {
@@ -163,6 +176,10 @@ public class BatteryMeterViewController extends ViewController<BatteryMeterView>
     @Override
     protected void onViewAttached() {
         mConfigurationController.addCallback(mConfigurationListener);
+        if (mLocation == StatusBarLocation.HOME) {
+            mTunerService.addTunable(mColorTunable, "system:" + SYSTEM_ICON_COLOR_ENABLED,
+                    "system:" + SYSTEM_ICON_COLOR);
+        }
         subscribeForTunerUpdates();
         mBatteryController.addCallback(mBatteryStateChangeCallback);
 
@@ -176,6 +193,7 @@ public class BatteryMeterViewController extends ViewController<BatteryMeterView>
     @Override
     protected void onViewDetached() {
         mConfigurationController.removeCallback(mConfigurationListener);
+        if (mLocation == StatusBarLocation.HOME) mTunerService.removeTunable(mColorTunable);
         unsubscribeFromTunerUpdates();
         mBatteryController.removeCallback(mBatteryStateChangeCallback);
 

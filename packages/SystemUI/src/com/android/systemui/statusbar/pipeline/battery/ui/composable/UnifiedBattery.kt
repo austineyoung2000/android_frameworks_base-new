@@ -174,11 +174,12 @@ fun UnifiedBattery(
     viewModel: BatteryViewModel,
     isDarkProvider: () -> IsAreaDark,
     modifier: Modifier,
+    customColor: Color? = null,
 ) {
     var bounds by remember { mutableStateOf(Rect()) }
 
     val colorProvider = {
-        if (isDarkProvider().isDarkTheme(bounds)) {
+        customColor?.let { BatteryColors.Custom(it) } ?: if (isDarkProvider().isDarkTheme(bounds)) {
             viewModel.colorProfile.dark
         } else {
             viewModel.colorProfile.light
@@ -447,7 +448,9 @@ fun CircleBatteryBody(
         // Draw colored arc representing charge level
         if (level != null && level > 0) {
             drawArc(
-                if (attr is BatteryGlyph.Bolt || attr is BatteryGlyph.Defend) {
+                if (colors is BatteryColors.Custom) {
+                    colors.fill
+                } else if (attr is BatteryGlyph.Bolt || attr is BatteryGlyph.Defend) {
                     BatteryColors.DarkTheme.Charging.fill
                 } else if (attr is BatteryGlyph.Plus) {
                     BatteryColors.DarkTheme.PowerSave.fill

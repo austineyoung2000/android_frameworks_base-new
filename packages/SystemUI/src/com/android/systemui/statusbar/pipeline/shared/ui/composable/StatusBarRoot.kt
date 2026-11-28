@@ -1101,6 +1101,7 @@ private fun addBatteryComposable(
                     viewModel = viewModel,
                     isDarkProvider = { statusBarViewModel.areaDark },
                     showPercent = viewModel.isBatteryPercentSettingEnabled,
+                    customColor = rememberSystemIconColor(),
                 )
             }
             setId(R.id.battery_composable_view)
@@ -1149,6 +1150,7 @@ private fun addEndSideComposable(
                         isDarkProvider = { statusBarViewModel.areaDark },
                         modifier = Modifier.wrapContentSize(),
                         showPercent = viewModel.isBatteryPercentSettingEnabled,
+                        customColor = rememberSystemIconColor(),
                     )
                 }
             }
@@ -1167,7 +1169,7 @@ private fun SystemStatusIconsContainer(
     systemStatusIconBlockListInteractor: SystemStatusIconBlocklistInteractor,
 ) {
     var bounds by remember { mutableStateOf(Rect()) }
-    val tint = if (isDark.isDarkTheme(bounds)) Color.White else Color.Black
+    val tint = rememberSystemIconColor() ?: if (isDark.isDarkTheme(bounds)) Color.White else Color.Black
     SystemStatusIcons(
         viewModelFactory = viewModelFactory,
         tint = tint,

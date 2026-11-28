@@ -32,6 +32,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Rect;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -95,6 +96,21 @@ public class BatteryMeterView extends LinearLayout implements DarkReceiver {
 
     private DualToneHandler mDualToneHandler;
     private boolean mIsStaticColor = false;
+    private boolean mCustomStatusBarColorEnabled;
+    private int mCustomStatusBarColor = Color.WHITE;
+    private ArrayList<Rect> mLastTintAreas = new ArrayList<>();
+    private float mLastDarkIntensity;
+    private int mLastTint = DarkIconDispatcher.DEFAULT_ICON_TINT;
+
+    public void setCustomStatusBarColor(boolean enabled, int color) {
+        boolean wasEnabled = mCustomStatusBarColorEnabled;
+        mCustomStatusBarColorEnabled = enabled;
+        mCustomStatusBarColor = color;
+        if (wasEnabled && !enabled) {
+            onDarkChangedLegacy(mLastTintAreas, mLastDarkIntensity, mLastTint);
+        }
+        onDarkChanged(mLastTintAreas, mLastDarkIntensity, mLastTint);
+    }
 
     private BatteryEstimateFetcher mBatteryEstimateFetcher;
 
@@ -689,6 +705,18 @@ public class BatteryMeterView extends LinearLayout implements DarkReceiver {
     @Override
     public void onDarkChanged(ArrayList<Rect> areas, float darkIntensity, int tint) {
         if (mIsStaticColor) return;
+        mLastTintAreas = areas == null ? new ArrayList<>() : new ArrayList<>(areas);
+        mLastDarkIntensity = darkIntensity;
+        mLastTint = tint;
+        if (mCustomStatusBarColorEnabled) {
+            int color = mCustomStatusBarColor;
+            updateColors(color, (color & 0x00ffffff) | 0x44000000, color);
+            if (NewStatusBarIcons.isEnabled() && mUnifiedBattery != null) {
+                mUnifiedBatteryColors = new BatteryColors.CustomColor(color);
+                mUnifiedBattery.setColors(mUnifiedBatteryColors);
+            }
+            return;
+        }
 
         if (!NewStatusBarIcons.isEnabled()) {
             onDarkChangedLegacy(areas, darkIntensity, tint);
