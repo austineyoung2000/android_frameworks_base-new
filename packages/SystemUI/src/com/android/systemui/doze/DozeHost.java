@@ -78,6 +78,9 @@ public interface DozeHost {
      */
     void onSlpiTap(float x, float y);
 
+    /** Returns true only when an active Ambient Peek icon handled this AOD tap. */
+    default boolean onAmbientPeekTap(float x, float y) { return false; }
+
     /**
      * Artificially dim down the display by changing scrim opacities.
      * @param scrimOpacity opacity from 0 to 1.

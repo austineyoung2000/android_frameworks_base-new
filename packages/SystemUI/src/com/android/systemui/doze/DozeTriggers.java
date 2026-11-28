@@ -344,6 +344,11 @@ public class DozeTriggers implements DozeMachine.Part {
                     return;
                 }
                 if (isDoubleTap || isTap) {
+                    if (isTap && mDozeHost.onAmbientPeekTap(screenX, screenY)) {
+                        // The one-shot tap sensor needs rearming when we stay in AOD.
+                        mDozeSensors.rearmAmbientPeekTap();
+                        return;
+                    }
                     mDozeHost.onSlpiTap(screenX, screenY);
                     gentleWakeUp(pulseReason);
                 } else if (isPickup) {

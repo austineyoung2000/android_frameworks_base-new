@@ -32,6 +32,14 @@ import androidx.constraintlayout.widget.ConstraintSet.END
 import androidx.constraintlayout.widget.ConstraintSet.PARENT_ID
 import androidx.constraintlayout.widget.ConstraintSet.START
 import androidx.constraintlayout.widget.ConstraintSet.TOP
+import com.android.systemui.doze.ambientpeek.AmbientPeekController
+import com.android.systemui.doze.ambientpeek.AmbientPeekTapView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
+import com.android.systemui.lifecycle.repeatWhenAttached
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import com.android.systemui.common.ui.ConfigurationState
 import com.android.systemui.customization.clocks.R as clocksR
 import com.android.systemui.keyguard.shared.model.KeyguardSection
@@ -61,11 +69,17 @@ constructor(
     @ShadeDisplayAware private val systemBarUtilsState: SystemBarUtilsState,
     private val rootViewModel: KeyguardRootViewModel,
     private val shadeModeInteractor: ShadeModeInteractor,
+    private val ambientPeekController: AmbientPeekController,
+    private val keyguardInteractor: KeyguardInteractor,
 ) : KeyguardSection() {
 
     private var nicBindingDisposable: DisposableHandle? = null
+    private var ambientPeekDisposable: DisposableHandle? = null
     private val nicId = R.id.aod_notification_icon_container
     private lateinit var nic: NotificationIconContainer
+    private lateinit var ambientPeekView: AmbientPeekTapView
+    private val ambientPeekId = View.generateViewId()
+    private var ambientPeekReady = false
     private var centerIconsObserver: ContentObserver? = null
 
     override fun addViews(constraintLayout: ConstraintLayout) {
@@ -82,6 +96,13 @@ constructor(
             }
 
         constraintLayout.addView(nic)
+        ambientPeekView = AmbientPeekTapView(context).apply {
+            id = ambientPeekId
+            visibility = GONE
+            isClickable = false
+        }
+        constraintLayout.addView(ambientPeekView)
+        ambientPeekView.setClockAnchor(nic)
         registerCenterIconsObserver(constraintLayout)
     }
 
@@ -96,6 +117,23 @@ constructor(
                 iconBindingFailureTracker,
                 nicAodIconViewStore,
             )
+        ambientPeekView.setReadyListener { ready ->
+            ambientPeekReady = ready
+            nic.visibility = if (ready) View.INVISIBLE
+                else if (rootViewModel.isNotifIconContainerVisible.value.value) VISIBLE else GONE
+        }
+        ambientPeekController.attach(ambientPeekView)
+        ambientPeekDisposable?.dispose()
+        ambientPeekDisposable = ambientPeekView.repeatWhenAttached {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch {
+                    combine(keyguardInteractor.primaryBouncerShowing,
+                        keyguardInteractor.alternateBouncerShowing) { primary, alternate ->
+                        primary || alternate
+                    }.collect { ambientPeekController.setBouncerShowing(it) }
+                }
+            }
+        }
         applyCenterAlignment()
     }
 
@@ -113,7 +151,15 @@ constructor(
             connect(nicId, TOP, AodPromotedNotificationSection.viewId, BOTTOM, bottomMargin)
 
             setGoneMargin(nicId, BOTTOM, bottomMargin)
-            setVisibility(nicId, if (isVisible.value) VISIBLE else GONE)
+            setVisibility(nicId, if (ambientPeekReady) View.INVISIBLE else if (isVisible.value) VISIBLE else GONE)
+
+            connect(ambientPeekId, TOP, PARENT_ID, TOP)
+            connect(ambientPeekId, BOTTOM, PARENT_ID, BOTTOM)
+            connect(ambientPeekId, START, PARENT_ID, START)
+            connect(ambientPeekId, END, PARENT_ID, END)
+            constrainWidth(ambientPeekId, ConstraintSet.MATCH_CONSTRAINT)
+            constrainHeight(ambientPeekId, ConstraintSet.MATCH_CONSTRAINT)
+            setVisibility(ambientPeekId, ambientPeekView.visibility)
 
             if (NotificationMinimalism.isEnabled && isCentered) {
                 connect(nicId, START, PARENT_ID, START, horizontalMargin)
@@ -132,6 +178,12 @@ constructor(
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
         unregisterCenterIconsObserver()
+        ambientPeekDisposable?.dispose()
+        ambientPeekDisposable = null
+        ambientPeekController.detach(ambientPeekView)
+        ambientPeekView.setReadyListener(null)
+        ambientPeekReady = false
+        constraintLayout.removeView(ambientPeekView)
         constraintLayout.removeView(nicId)
         nicBindingDisposable?.dispose()
     }

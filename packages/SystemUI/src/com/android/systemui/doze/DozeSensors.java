@@ -466,6 +466,15 @@ public class DozeSensors {
         }
     }
 
+    /** Re-arm the one-shot AOD tap sensor when Ambient Peek consumes a tap. */
+    public void rearmAmbientPeekTap() {
+        for (TriggerSensor sensor : mTriggerSensors) {
+            if (sensor.mPulseReason == DozeLog.REASON_SENSOR_TAP) {
+                sensor.updateListening();
+            }
+        }
+    }
+
     public void onUserSwitched() {
         for (TriggerSensor s : mTriggerSensors) {
             s.updateListening();
