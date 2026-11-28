@@ -24,6 +24,7 @@ import com.android.systemui.statusbar.notification.collection.coordinator.dagger
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter
 import com.android.systemui.statusbar.notification.collection.provider.SectionHeaderVisibilityProvider
 import com.android.systemui.statusbar.notification.interruption.KeyguardNotificationVisibilityProvider
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
 import javax.inject.Inject
 
 /**
@@ -38,12 +39,14 @@ constructor(
     private val keyguardNotificationVisibilityProvider: KeyguardNotificationVisibilityProvider,
     private val sectionHeaderVisibilityProvider: SectionHeaderVisibilityProvider,
     private val statusBarStateController: StatusBarStateController,
+    private val risingStacksController: RisingStacksController? = null,
 ) : Coordinator {
 
     override fun attach(pipeline: NotifPipeline) {
         setupInvalidateNotifListCallbacks()
         // Filter at the "finalize" stage so that views remain bound by PreparationCoordinator
         pipeline.addFinalizeFilter(notifFilter)
+        risingStacksController?.attach(pipeline)
         keyguardNotificationVisibilityProvider.addOnStateChangedListener(::invalidateListFromFilter)
         updateSectionHeadersVisibility()
     }

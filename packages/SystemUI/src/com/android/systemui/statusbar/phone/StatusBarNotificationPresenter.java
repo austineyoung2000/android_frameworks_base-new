@@ -310,7 +310,11 @@ class StatusBarNotificationPresenter implements NotificationPresenter, CommandQu
                 mActivityStarter.dismissKeyguardThenExecute(() -> false /* dismissAction */
                         , null /* cancelRunnable */, false /* afterKeyguardGone */);
             } else if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
-                mShadeTransitionController.goToLockedShade(row, /* needsQSAnimation = */ true);
+                // The Stacks preview expands the selected row in place. Redacted and app-locked
+                // notifications retain the normal lockscreen authentication/shade behavior.
+                if (!row.canExpandInRisingStacks()) {
+                    mShadeTransitionController.goToLockedShade(row, /* needsQSAnimation = */ true);
+                }
             } else if (clickedEntry.isSensitive().getValue()
                         && mShadeTransitionController.isLockdownShade()) {
                 mStatusBarStateController.setLeaveOpenOnKeyguardHide(true);

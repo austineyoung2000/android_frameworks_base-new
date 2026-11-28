@@ -16,14 +16,19 @@
 package com.android.systemui.keyguard.ui.view.layout.sections
 
 import android.content.Context
+import android.app.ActivityManager
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import androidx.constraintlayout.widget.Barrier
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.res.R
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.lockscreen.ExtraInfoWidgetsController
+import com.android.systemui.plugins.statusbar.StatusBarStateController
 import javax.inject.Inject
 import org.lunaris.extrainfowidgets.ExtraInfoFreeformView
 
@@ -32,10 +37,13 @@ class InfoWidgetsSection
 constructor(
     private val context: Context,
     private val infoWidgetsController: ExtraInfoWidgetsController,
+    private val statusBarStateController: StatusBarStateController,
 ) : KeyguardSection() {
     
     private var infoWidgetsView: View? = null
     private var freeformView: ExtraInfoFreeformView? = null
+    private var positioningListener: ViewTreeObserver.OnPreDrawListener? = null
+    private var positionAdjustmentApplied = false
     
     override fun addViews(constraintLayout: ConstraintLayout) {
         
@@ -64,7 +72,101 @@ constructor(
     }
     
     override fun bindData(constraintLayout: ConstraintLayout) {
-        // ProgressImageView components handle their own data binding
+        val widget = infoWidgetsView ?: return
+        positioningListener?.let {
+            if (constraintLayout.viewTreeObserver.isAlive) {
+                constraintLayout.viewTreeObserver.removeOnPreDrawListener(it)
+            }
+        }
+        val widgetLocation = IntArray(2)
+        val rowLocation = IntArray(2)
+        val gap = (8f * context.resources.displayMetrics.density + 0.5f).toInt()
+        // Restore Rising's original anchor when returning to doze or when the clock bounds vanish.
+        var originalTopToTop: Int? = null
+        var originalTopToBottom = ConstraintLayout.LayoutParams.UNSET
+        var originalTopMargin = 0
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            val root = constraintLayout.rootView
+            val ambientPeek = statusBarStateController.isDozing &&
+                Settings.System.getIntForUser(context.contentResolver, "ambient_peek_enabled", 0,
+                    ActivityManager.getCurrentUser()) != 0
+            val params = widget.layoutParams as? ConstraintLayout.LayoutParams
+            var awakeClockBottom = (root.getTag(R.id.ambient_peek_clock_bottom) as? Float) ?: -1f
+            if (awakeClockBottom <= 0f && !statusBarStateController.isDozing) {
+                val clockLocation = IntArray(2)
+                for (id in intArrayOf(R.id.clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE)) {
+                    val clock = root.findViewById<View>(id) ?: continue
+                    if (!clock.isShown || clock.alpha <= 0f || clock.height <= 0 ||
+                        clock.height >= root.height * 0.6f) continue
+                    clock.getLocationInWindow(clockLocation)
+                    awakeClockBottom = maxOf(awakeClockBottom,
+                        clockLocation[1] + clock.height * clock.scaleY)
+                }
+            }
+            if (!statusBarStateController.isDozing && widget.isShown && params != null &&
+                awakeClockBottom > 0f) {
+                val parentLocation = IntArray(2)
+                constraintLayout.getLocationInWindow(parentLocation)
+                val anchorBottom = awakeClockBottom
+                val targetMargin = (anchorBottom - parentLocation[1] + gap).toInt().coerceAtLeast(0)
+                val currentLocation = IntArray(2)
+                widget.getLocationInWindow(currentLocation)
+                val needsAdjustment = originalTopToTop != null ||
+                    currentLocation[1] < anchorBottom + gap
+                if (needsAdjustment) {
+                    if (originalTopToTop == null) {
+                        originalTopToTop = params.topToTop
+                        originalTopToBottom = params.topToBottom
+                        originalTopMargin = params.topMargin
+                    }
+                    if (params.topToTop != ConstraintSet.PARENT_ID ||
+                        params.topToBottom != ConstraintLayout.LayoutParams.UNSET ||
+                        params.topMargin != targetMargin) {
+                        params.topToTop = ConstraintSet.PARENT_ID
+                        params.topToBottom = ConstraintLayout.LayoutParams.UNSET
+                        params.topMargin = targetMargin
+                        widget.layoutParams = params
+                    }
+                }
+            } else if (params != null && originalTopToTop != null) {
+                params.topToTop = originalTopToTop!!
+                params.topToBottom = originalTopToBottom
+                params.topMargin = originalTopMargin
+                widget.layoutParams = params
+                originalTopToTop = null
+            }
+            if (widget.isShown && ambientPeek) {
+                val location = IntArray(2)
+                val windowLocation = IntArray(2)
+                root.getLocationOnScreen(location)
+                root.getLocationInWindow(windowLocation)
+                val clockWindowBottom = (root.getTag(R.id.ambient_peek_clock_bottom) as? Float) ?: -1f
+                var clockBottom = if (clockWindowBottom > 0f)
+                    (clockWindowBottom + location[1] - windowLocation[1]).toInt() else 0
+                for (id in intArrayOf(R.id.clock_ls, R.id.aod_ls,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE)) {
+                    val clock = root.findViewById<View>(id) ?: continue
+                    if (!clock.isShown || clock.alpha <= 0f || clock.height <= 0 ||
+                        clock.height >= root.height * 0.6f) continue
+                    clock.getLocationOnScreen(rowLocation)
+                    clockBottom = maxOf(clockBottom,
+                        rowLocation[1] + (clock.height * clock.scaleY).toInt())
+                }
+                widget.getLocationOnScreen(widgetLocation)
+                val baseTop = widgetLocation[1] - widget.translationY
+                widget.translationY = if (clockBottom > 0)
+                    (clockBottom + gap - baseTop).coerceAtLeast(0f) else 0f
+                positionAdjustmentApplied = widget.translationY != 0f
+            } else if (positionAdjustmentApplied) {
+                widget.translationY = 0f
+                positionAdjustmentApplied = false
+            }
+            true
+        }
+        positioningListener = listener
+        constraintLayout.viewTreeObserver.addOnPreDrawListener(listener)
     }
     
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -149,6 +251,13 @@ constructor(
     }
     
     override fun removeViews(constraintLayout: ConstraintLayout) {
+        positioningListener?.let {
+            if (constraintLayout.viewTreeObserver.isAlive) {
+                constraintLayout.viewTreeObserver.removeOnPreDrawListener(it)
+            }
+        }
+        positioningListener = null
+        positionAdjustmentApplied = false
         infoWidgetsView?.let { view ->
             (view.parent as? ViewGroup)?.removeView(view)
         }

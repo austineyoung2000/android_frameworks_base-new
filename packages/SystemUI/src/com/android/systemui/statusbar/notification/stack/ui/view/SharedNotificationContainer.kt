@@ -19,6 +19,7 @@ package com.android.systemui.statusbar.notification.stack.ui.view
 import android.content.Context
 import android.util.AttributeSet
 import android.view.View
+import android.view.ViewTreeObserver
 import androidx.constraintlayout.core.widgets.Optimizer
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
@@ -30,6 +31,10 @@ import androidx.constraintlayout.widget.ConstraintSet.TOP
 import androidx.constraintlayout.widget.ConstraintSet.VERTICAL
 import com.android.systemui.res.R
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksView
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition.EdgeToMiddle
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition.MiddleToEdge
@@ -42,6 +47,81 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
     ConstraintLayout(context, attrs) {
 
     private val baseConstraintSet = ConstraintSet()
+    private var risingStacksView: RisingStacksView? = null
+    private var lastLayout: LayoutValues? = null
+    private val selectorLocation = IntArray(2)
+    private val shelfLocation = IntArray(2)
+    private val positionStacks = ViewTreeObserver.OnPreDrawListener {
+        val selector = risingStacksView
+        val stack = findViewById<NotificationStackScrollLayout>(R.id.notification_stack_scroller)
+        val shelf = stack?.shelf
+        if (selector != null && selector.visibility == View.VISIBLE &&
+            stack != null && shelf != null && shelf.isLaidOut && shelf.isShown && shelf.alpha > 0f
+        ) {
+            getLocationOnScreen(selectorLocation)
+            var firstRow: ExpandableNotificationRow? = null
+            for (i in 0 until stack.childCount) {
+                val child = stack.getChildAt(i)
+                if (child is ExpandableNotificationRow && child.isShown && child.alpha > 0f &&
+                    stack.isMotoCompactNotificationSelected(child) &&
+                    (firstRow == null || child.y < firstRow.y)
+                ) {
+                    firstRow = child
+                }
+            }
+            if (firstRow != null) {
+                firstRow.getLocationOnScreen(shelfLocation)
+                shelfLocation[1] += stack.risingStacksScrollOffset - selector.height
+            } else {
+                shelf.getLocationOnScreen(shelfLocation)
+            }
+            selector.translationY = (shelfLocation[1] - selectorLocation[1] - selector.top).toFloat()
+            selector.alpha = shelf.alpha
+        } else if (selector != null) {
+            selector.alpha = 0f
+        }
+        true
+    }
+
+    private data class LayoutValues(
+        val position: HorizontalPosition,
+        val start: Int,
+        val top: Int,
+        val end: Int,
+        val bottom: Int,
+        val alpha: Float,
+    )
+
+    fun setRisingStacksView(view: RisingStacksView) {
+        risingStacksView?.let { removeView(it) }
+        risingStacksView = view
+        addView(view)
+        view.bringToFront()
+        viewTreeObserver.addOnPreDrawListener(positionStacks)
+    }
+
+    fun removeRisingStacksView(view: RisingStacksView) {
+        if (risingStacksView === view) {
+            if (viewTreeObserver.isAlive) viewTreeObserver.removeOnPreDrawListener(positionStacks)
+            removeView(view)
+            risingStacksView = null
+        }
+    }
+
+    fun renderRisingStacks(state: RisingStacksController.UiState) {
+        val selector = risingStacksView ?: return
+        val wasVisible = selector.visibility == View.VISIBLE
+        val oldHeight = selector.preferredHeightPx
+        selector.render(state)
+        if (state.visible) selector.bringToFront()
+        if (wasVisible != state.visible || oldHeight != selector.preferredHeightPx) {
+            lastLayout?.let { values ->
+                updateConstraints(values.position, values.start, values.top, values.end,
+                    values.bottom, findViewById<View>(R.id.notification_stack_scroller)?.alpha
+                        ?: values.alpha)
+            }
+        }
+    }
 
     init {
         optimizationLevel = optimizationLevel or Optimizer.OPTIMIZATION_GRAPH
@@ -64,6 +144,9 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
         marginBottom: Int,
         nsslAlpha: Float,
     ) {
+        lastLayout = LayoutValues(
+            horizontalPosition, marginStart, marginTop, marginEnd, marginBottom, nsslAlpha
+        )
         val constraintSet = ConstraintSet()
         constraintSet.clone(baseConstraintSet)
 
@@ -106,7 +189,20 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
             connect(nsslId, START, startConstraintId, START, marginStart)
             connect(nsslId, END, endConstraintId, END, marginEnd)
             connect(nsslId, BOTTOM, PARENT_ID, BOTTOM, marginBottom)
+            val selector = risingStacksView
+            val selectorVisible = selector?.visibility == View.VISIBLE
+            val selectorHeight = if (selectorVisible) {
+                selector?.preferredHeightPx ?: 0
+            } else 0
             connect(nsslId, TOP, PARENT_ID, TOP, marginTop)
+            if (selector != null) {
+                constrainWidth(selector.id, ConstraintSet.MATCH_CONSTRAINT)
+                constrainHeight(selector.id, selectorHeight)
+                connect(selector.id, START, startConstraintId, START, marginStart)
+                connect(selector.id, END, endConstraintId, END, marginEnd)
+                connect(selector.id, TOP, PARENT_ID, TOP, 0)
+                setVisibility(selector.id, selector.visibility)
+            }
         }
         constraintSet.applyTo(this)
     }

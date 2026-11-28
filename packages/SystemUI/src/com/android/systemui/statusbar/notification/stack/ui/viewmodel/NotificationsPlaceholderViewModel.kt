@@ -37,6 +37,7 @@ import com.android.systemui.shade.shared.model.ShadeMode
 import com.android.systemui.statusbar.domain.interactor.RemoteInputInteractor
 import com.android.systemui.statusbar.notification.domain.interactor.HeadsUpNotificationInteractor
 import com.android.systemui.statusbar.notification.stack.domain.interactor.NotificationStackAppearanceInteractor
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
 import com.android.systemui.statusbar.notification.stack.shared.model.AccessibilityScrollEvent
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimBounds
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimRounding
@@ -51,6 +52,7 @@ import java.util.function.Consumer
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 /**
@@ -70,12 +72,17 @@ constructor(
     remoteInputInteractor: RemoteInputInteractor,
     dumpManager: DumpManager,
     private val wallpaperFocalAreaInteractor: WallpaperFocalAreaInteractor,
+    private val risingStacksController: RisingStacksController? = null,
 ) :
     HydratedActivatable(),
     ActivatableFlowDumper by ActivatableFlowDumperImpl(
         dumpManager = dumpManager,
         tag = "NotificationsPlaceholderViewModel",
     ) {
+
+    /** Enables the lock-screen scrolling surface only for Rising Stacks. */
+    val risingStacksActive: Flow<Boolean> =
+        risingStacksController?.state?.map { it.visible } ?: flowOf(false)
 
     fun setStackScrollTop(value: Float) {
         placeholderStateStorage.setStackScrollTop(contentKey, value)

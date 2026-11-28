@@ -34,6 +34,8 @@ import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.shared.Flags.extendedWallpaperEffects
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController
 import com.android.systemui.statusbar.notification.stack.NotificationStackSizeCalculator
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksView
 import com.android.systemui.statusbar.notification.stack.ui.view.SharedNotificationContainer
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel
 import com.android.systemui.util.kotlin.DisposableHandles
@@ -58,13 +60,14 @@ constructor(
     @AndroidUi private val androidUiDispatcher: CoroutineContext,
     @Main private val mainImmediateDispatcher: CoroutineDispatcher,
     val keyguardInteractor: KeyguardInteractor,
+    private val risingStacksController: RisingStacksController? = null,
 ) {
 
     private val calculateMaxNotifications: (Float, Boolean) -> Int = { space, extraShelfSpace ->
         val shelfHeight = controller.getShelfHeight().toFloat()
         notificationStackSizeCalculator.computeMaxKeyguardNotifications(
             controller.view,
-            space,
+            (space - controller.view.risingStacksHeaderHeight).coerceAtLeast(0f),
             if (extraShelfSpace) shelfHeight else 0f,
             shelfHeight,
         )
@@ -75,6 +78,40 @@ constructor(
         viewModel: SharedNotificationContainerViewModel,
     ): DisposableHandle {
         val disposables = DisposableHandles()
+        risingStacksController?.let { stacks ->
+            val selector = RisingStacksView(view.context, stacks::select)
+            view.setRisingStacksView(selector)
+            disposables += view.repeatWhenAttached {
+                repeatOnLifecycle(Lifecycle.State.CREATED) {
+                    launch {
+                        combine(
+                            stacks.state,
+                            keyguardInteractor.primaryBouncerShowing,
+                            keyguardInteractor.alternateBouncerShowing,
+                            viewModel.isOnAnyBouncer,
+                        ) { state, primaryBouncer, alternateBouncer, transitioningBouncer ->
+                            state to (primaryBouncer || alternateBouncer || transitioningBouncer)
+                        }.collect { (state, bouncerShowing) ->
+                            controller.view.setRisingStacksHeaderHeight(selector.headerHeightPx(state))
+                            controller.view.setRisingStacksState(
+                                state.visible,
+                                state.selected?.packageName,
+                                state.selected?.userId ?: android.os.UserHandle.USER_NULL,
+                            )
+                            // Keep the compact shelf suppressed while hiding the selector from
+                            // the credential screen, including bouncer transitions.
+                            view.renderRisingStacks(
+                                state.copy(visible = state.visible && !bouncerShowing)
+                            )
+                        }
+                    }
+                }
+            }
+            disposables += DisposableHandle {
+                controller.view.setRisingStacksState(false, null, android.os.UserHandle.USER_NULL)
+                view.removeRisingStacksView(selector)
+            }
+        }
         disposables +=
             view.repeatWhenAttached {
                 repeatOnLifecycle(Lifecycle.State.CREATED) {

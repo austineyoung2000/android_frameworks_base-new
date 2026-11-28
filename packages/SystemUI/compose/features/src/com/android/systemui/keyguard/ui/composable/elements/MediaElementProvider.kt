@@ -22,12 +22,19 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
 import com.android.compose.animation.scene.ElementContentScope
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardMediaViewModel
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.media.ui.compose.MiniPlayerCompact
+import com.android.systemui.media.ui.viewmodel.MiniPlayerViewModel
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
 import com.android.systemui.media.remedia.ui.compose.Media
 import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.plugins.keyguard.ui.composable.elements.BaseLockscreenElement.ElementSource
@@ -36,6 +43,8 @@ import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenEl
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementProvider
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenScope
 import com.android.systemui.shade.ShadeDisplayAware
+import com.android.systemui.res.R
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout
 import javax.inject.Inject
 import kotlin.collections.List
 
@@ -45,6 +54,8 @@ class MediaElementProvider
 constructor(
     @ShadeDisplayAware private val context: Context,
     private val mediaViewModelFactory: KeyguardMediaViewModel.Factory,
+    private val miniPlayerViewModelFactory: MiniPlayerViewModel.Factory,
+    private val risingStacksController: RisingStacksController,
 ) : LockscreenElementProvider {
     override val elements: List<LockscreenElement> by lazy { listOf(MediaCarouselElement()) }
 
@@ -58,12 +69,30 @@ constructor(
             val viewModel =
                 rememberViewModel("MediaCarouselElement") { mediaViewModelFactory.create() }
 
+            val root = LocalView.current.rootView
+            val mediaVisible = viewModel.isMediaVisible && !viewModel.isDozing
+            DisposableEffect(root, mediaVisible) {
+                fun updateStacks(visible: Boolean) {
+                    root.setTag(R.id.rising_stacks_media_visible, visible)
+                    root.findViewById<NotificationStackScrollLayout>(R.id.notification_stack_scroller)
+                        ?.onRisingStacksMediaVisibilityChanged()
+                }
+                updateStacks(mediaVisible)
+                onDispose { updateStacks(false) }
+            }
             AnimatedVisibility(
-                viewModel.isMediaVisible && !viewModel.isDozing,
+                mediaVisible,
                 enter = expandVertically(expandFrom = Alignment.Top),
                 exit = fadeOut(),
             ) {
-                Media(
+                val stacksEnabled by risingStacksController.isEnabled.collectAsStateWithLifecycle()
+                if (stacksEnabled) {
+                    val miniPlayer = rememberViewModel("MiniPlayerStacks") {
+                        miniPlayerViewModelFactory.create()
+                    }
+                    MiniPlayerCompact(viewModel = miniPlayer, compact = true,
+                        notificationAppearance = true, modifier = Modifier.fillMaxWidth())
+                } else Media(
                     viewModelFactory = viewModel.mediaViewModelFactory,
                     presentationStyle = MediaPresentationStyle.Default,
                     behavior = viewModel.mediaUiBehavior,

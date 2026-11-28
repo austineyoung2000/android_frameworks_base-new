@@ -19,6 +19,8 @@ package com.android.systemui.keyguard.ui.composable.elements
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -26,6 +28,7 @@ import androidx.compose.ui.layout.HorizontalAlignmentLine
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.VerticalAlignmentLine
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
@@ -43,6 +46,7 @@ import com.android.systemui.keyguard.ui.viewmodel.AodBurnInViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenRootViewModel
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.res.R
 import com.android.systemui.plugins.keyguard.ui.composable.elements.BaseLockscreenElement.ElementSource
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElement
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementKeys
@@ -160,6 +164,16 @@ constructor(
                 val smartspaceBottom by
                     ambientBounds.smartspaceBottom.collectAsStateWithLifecycle()
                 val mediaBottom by ambientBounds.mediaBottom.collectAsStateWithLifecycle()
+                // Share the rendered clock bottom with the legacy widget views in this window.
+                val windowRoot = LocalView.current.rootView
+                val widgetClockBottom = listOf(largeClockBottom, largeDateWeatherBottom,
+                    smallClockBottom, smallDateWeatherBottom, smartspaceBottom)
+                    .filter { it > 0f }.maxOrNull() ?: -1f
+                SideEffect { windowRoot.setTag(R.id.ambient_peek_clock_bottom, widgetClockBottom) }
+                DisposableEffect(windowRoot) {
+                    onDispose { windowRoot.setTag(R.id.ambient_peek_clock_bottom, null) }
+                }
+
                 val indicationAreaTop by
                     ambientBounds.indicationAreaTop.collectAsStateWithLifecycle()
                 val expandedAmbient by

@@ -6,6 +6,8 @@
 package com.android.systemui.keyguard.ui.view.layout.sections
 
 import android.content.Context
+import android.app.ActivityManager
+import android.provider.Settings
 import android.graphics.Rect
 import android.view.ViewGroup
 import android.view.LayoutInflater
@@ -26,6 +28,7 @@ import com.android.systemui.res.R
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.statusbar.phone.SystemUIDialogFactory
 import com.android.systemui.statusbar.policy.KeyguardStateController
+import com.android.systemui.plugins.statusbar.StatusBarStateController
 import javax.inject.Inject
 import com.android.systemui.shared.R as SharedR
 
@@ -35,13 +38,14 @@ class KeyguardWidgetViewSection @Inject constructor(
     private val falsingManager: FalsingManager,
     private val userTracker: UserTracker,
     private val keyguardStateController: KeyguardStateController,
+    private val statusBarStateController: StatusBarStateController,
     private val trampolineInteractor: WidgetTrampolineInteractor,
     private val dialogFactory: SystemUIDialogFactory,
 ) : KeyguardSection() {
     private var widgetView: LockScreenWidgets? = null
     private var appWidgets: WidgetViewport? = null
     private var controller: KeyguardWidgetHostController? = null
-    private var layoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
+    private var layoutListener: ViewTreeObserver.OnPreDrawListener? = null
     private var contentIds = intArrayOf()
     private var splitShade = false
 
@@ -77,8 +81,40 @@ class KeyguardWidgetViewSection @Inject constructor(
         val viewport = appWidgets ?: return
         controller = KeyguardWidgetHostController(context, viewport, activityStarter, falsingManager,
             userTracker, keyguardStateController, trampolineInteractor, dialogFactory).also { it.attach() }
-        val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            if (viewport.visibility != View.VISIBLE) return@OnGlobalLayoutListener
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            val widget = widgetView
+            val root = constraintLayout.rootView
+            val ambientPeek = statusBarStateController.isDozing &&
+                Settings.System.getIntForUser(context.contentResolver, "ambient_peek_enabled", 0,
+                    ActivityManager.getCurrentUser()) != 0
+            if (widget != null) {
+                var targetBottom = 0f
+                if (ambientPeek && widget.isShown) {
+                    val screen = IntArray(2)
+                    val window = IntArray(2)
+                    root.getLocationOnScreen(screen)
+                    root.getLocationInWindow(window)
+                    val clock = (root.getTag(R.id.ambient_peek_clock_bottom) as? Float) ?: -1f
+                    if (clock > 0f) targetBottom = clock + screen[1] - window[1]
+                    for (id in intArrayOf(R.id.clock_ls, R.id.aod_ls,
+                        ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                        ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE, R.id.keyguard_info_widgets)) {
+                        val content = root.findViewById<View>(id) ?: continue
+                        if (!content.isShown || content.alpha <= 0f || content.height <= 0 ||
+                            content.height >= root.height * 0.6f) continue
+                        content.getLocationOnScreen(screen)
+                        targetBottom = maxOf(targetBottom, screen[1] + content.height * content.scaleY)
+                    }
+                    widget.getLocationOnScreen(screen)
+                    val baseTop = screen[1] - widget.translationY
+                    widget.translationY = if (targetBottom > 0f)
+                        (targetBottom + 8 * context.resources.displayMetrics.density - baseTop)
+                            .coerceAtLeast(0f) else 0f
+                } else if (widget.translationY != 0f) {
+                    widget.translationY = 0f
+                }
+            }
+            if (viewport.visibility != View.VISIBLE) return@OnPreDrawListener true
             val density = context.resources.displayMetrics.density
             val reserved = (96 * density).toInt()
             val rootBounds = Rect()
@@ -93,13 +129,13 @@ class KeyguardWidgetViewSection @Inject constructor(
                 }
                 return bottom
             }
-            val clockBottom = listOf(R.id.clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+            val contentBottom = listOf(R.id.clock_ls, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
                 ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE)
                 .mapNotNull { constraintLayout.findViewById<View>(it) }.maxOfOrNull(::visualBottom) ?: 0
             val anchor = constraintLayout.findViewById<View>(R.id.keyguard_app_widget_anchor)
             val params = viewport.layoutParams as? ConstraintLayout.LayoutParams
             if (anchor != null && params != null) {
-                val margin = (8 * density).toInt() + (clockBottom - anchor.bottom).coerceAtLeast(0)
+                val margin = (8 * density).toInt() + (contentBottom - anchor.bottom).coerceAtLeast(0)
                 if (params.topMargin != margin) { params.topMargin = margin; viewport.layoutParams = params }
             }
             val limit = listOf(R.id.device_entry_icon_view, R.id.keyguard_indication_area,
@@ -109,9 +145,10 @@ class KeyguardWidgetViewSection @Inject constructor(
                 .minOfOrNull { it.top } ?: (constraintLayout.height - reserved)
             viewport.maximumHeight = minOf((constraintLayout.height * 0.45f).toInt(),
                 limit - viewport.top - reserved).coerceAtLeast(0)
+            true
         }
         layoutListener = listener
-        constraintLayout.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        constraintLayout.viewTreeObserver.addOnPreDrawListener(listener)
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -153,7 +190,11 @@ class KeyguardWidgetViewSection @Inject constructor(
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
-        layoutListener?.let { constraintLayout.viewTreeObserver.removeOnGlobalLayoutListener(it) }
+        layoutListener?.let {
+            if (constraintLayout.viewTreeObserver.isAlive) {
+                constraintLayout.viewTreeObserver.removeOnPreDrawListener(it)
+            }
+        }
         layoutListener = null
         controller?.detach()
         controller = null

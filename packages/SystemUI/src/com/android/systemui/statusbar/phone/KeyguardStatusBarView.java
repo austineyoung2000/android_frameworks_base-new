@@ -23,6 +23,7 @@ import android.annotation.ColorInt;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.Rect;
@@ -116,6 +117,7 @@ public class KeyguardStatusBarView extends RelativeLayout {
     private final Rect mClipRect = new Rect(0, 0, 0, 0);
     private boolean mIsUserSwitcherEnabled;
 
+    private boolean mHideLockscreenStatusBar;
     private int mStatusBarExtraPaddingStart = 0;
     private int mStatusBarExtraPaddingTop = 0;
     private int mStatusBarExtraPaddingEnd = 0;
@@ -438,6 +440,23 @@ public class KeyguardStatusBarView extends RelativeLayout {
     @VisibleForTesting
     boolean isKeyguardUserAvatarEnabled() {
         return mKeyguardUserAvatarEnabled;
+    }
+
+    /** Suppress lockscreen bar drawing without changing visibility or touch handling. */
+    public void setLockscreenStatusBarHidden(boolean hidden) {
+        if (mHideLockscreenStatusBar == hidden) return;
+        mHideLockscreenStatusBar = hidden;
+        invalidate();
+    }
+
+    @Override
+    public void draw(Canvas canvas) {
+        if (!mHideLockscreenStatusBar) super.draw(canvas);
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        if (!mHideLockscreenStatusBar) super.dispatchDraw(canvas);
     }
 
     @Override

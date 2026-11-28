@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rising_stacks_all">All</string>
+    <string name="rising_stacks_show_all">Show all lock screen notifications</string>
+    <string name="rising_stacks_app_description">%1$s, %2$d notifications</string>
+</resources>

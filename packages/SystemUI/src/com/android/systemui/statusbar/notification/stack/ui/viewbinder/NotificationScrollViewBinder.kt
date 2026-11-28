@@ -30,6 +30,7 @@ import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.lifecycle.viewModel
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.statusbar.notification.shared.NsslTouchDispatchFix
+import com.android.systemui.statusbar.notification.stack.rising.RisingStacksController
 import com.android.systemui.statusbar.notification.stack.ui.view.NotificationScrollView
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationScrollViewModel
 import com.android.systemui.util.kotlin.FlowDumperImpl
@@ -39,6 +40,9 @@ import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.filter
 
 /** Binds the [NotificationScrollView], SceneContainer only. */
@@ -50,6 +54,7 @@ constructor(
     @AndroidUi private val androidUiDispatcher: CoroutineContext,
     private val view: NotificationScrollView,
     private val viewModelFactory: NotificationScrollViewModel.Factory,
+    private val risingStacksController: RisingStacksController? = null,
 ) : FlowDumperImpl(dumpManager) {
 
     private val viewLeftOffset = MutableStateFlow(0).dumpValue("viewLeftOffset")
@@ -108,11 +113,16 @@ constructor(
             }
             launch { viewModel.isSplitShade.collectTraced { view.setSplitShade(it) } }
             launch {
-                viewModel
-                    .getLockscreenDisplayConfig(view::calculateMaxNotifications)
-                    .collectLatestTraced { (isOnLockscreen, maxNotifications) ->
+                combine(
+                    viewModel.getLockscreenDisplayConfig(view::calculateMaxNotifications),
+                    risingStacksController?.state?.map { it.visible } ?: flowOf(false),
+                ) { config, stacksActive -> config to stacksActive }
+                    .collectLatestTraced { (config, stacksActive) ->
+                        val (isOnLockscreen, maxNotifications) = config
                         view.setOnLockscreen(isOnLockscreen)
-                        view.setMaxDisplayedNotifications(maxNotifications)
+                        view.setMaxDisplayedNotifications(
+                            if (isOnLockscreen && stacksActive) -1 else maxNotifications
+                        )
                     }
             }
             launch {
@@ -130,7 +140,13 @@ constructor(
                     view.setCurrentSceneLockscreen(it)
                 }
             }
-            launch { viewModel.isScrollable.collectTraced { view.setScrollingEnabled(it) } }
+            launch {
+                combine(
+                    viewModel.isScrollable,
+                    risingStacksController?.state?.map { it.visible } ?: flowOf(false),
+                ) { scrollable, stacksActive -> scrollable || stacksActive }
+                    .collectTraced { view.setScrollingEnabled(it) }
+            }
             launch { viewModel.isDozing.collectTraced { isDozing -> view.setDozing(isDozing) } }
             launch {
                 viewModel.isPulsing.collectTraced { isPulsing ->

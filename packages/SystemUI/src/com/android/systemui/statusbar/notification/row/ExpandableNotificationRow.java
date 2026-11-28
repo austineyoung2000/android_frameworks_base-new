@@ -3524,7 +3524,23 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      * @return whether the view state is currently expanded.
      */
     public boolean isExpanded() {
-        return isExpanded(mMotoCompactPreview /* allowOnKeyguard */);
+        // Permit an explicit user expansion in Rising Stacks without exposing public/redacted
+        // or app-locked content. Keep the normal lockscreen state for all other rows.
+        return isExpanded(mMotoCompactPreview
+                || (mHasUserChangedExpansion && canExpandInRisingStacks()));
+    }
+
+    /** Whether this row can expand in place in the Rising Stacks lockscreen preview. */
+    public boolean canExpandInRisingStacks() {
+        if (!mOnKeyguard || shouldShowPublic() || doesNotificationNeedAuth()) return false;
+        ViewParent parent = getParent();
+        while (parent != null) {
+            if (parent instanceof NotificationStackScrollLayout stack) {
+                return stack.isRisingStacksPreviewRow(this);
+            }
+            parent = parent.getParent();
+        }
+        return false;
     }
 
     public boolean isExpanded(boolean allowOnKeyguard) {

@@ -835,8 +835,14 @@ public class NotificationShelf extends ActivatableNotificationView {
             } else {
                 notificationClipEnd = shelfStart - mPaddingBetweenElements;
             }
-            int clipTop = updateNotificationClipHeight(child, notificationClipEnd, notGoneIndex);
-            clipTopAmount = Math.max(clipTop, clipTopAmount);
+            if (mHostLayout.isRisingStacksPreviewRow(child)) {
+                // The compact shelf is hidden for Stacks. Its old bottom clipping would turn
+                // the selected notification into a thin strip even inside the scroll viewport.
+                child.setClipBottomAmount(0);
+            } else {
+                int clipTop = updateNotificationClipHeight(child, notificationClipEnd, notGoneIndex);
+                clipTopAmount = Math.max(clipTop, clipTopAmount);
+            }
 
             // If the current row is an ExpandableNotificationRow, update its color, roundedness,
             // and icon state.
@@ -1370,6 +1376,15 @@ public class NotificationShelf extends ActivatableNotificationView {
 
 
     @Override
+    protected void dispatchDraw(android.graphics.Canvas canvas) {
+        // Keep the shelf in the notification layout as the Stacks anchor, but don't draw the
+        // old compact pill underneath the replacement selector.
+        if (mHostLayout == null || !mHostLayout.isRisingStacksActive()) {
+            super.dispatchDraw(canvas);
+        }
+    }
+
+    @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
 
@@ -1395,11 +1410,18 @@ public class NotificationShelf extends ActivatableNotificationView {
         }
     }
 
+    public void onRisingStacksModeChanged() {
+        updateInteractiveness();
+        invalidate();
+    }
+
     private void updateInteractiveness() {
         mInteractive = mCanInteract && mHasItemsInStableShelf;
         setClickable(mInteractive);
         setFocusable(mInteractive);
-        setImportantForAccessibility(mInteractive ? View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        setImportantForAccessibility(mInteractive
+                && (mHostLayout == null || !mHostLayout.isRisingStacksActive())
+                ? View.IMPORTANT_FOR_ACCESSIBILITY_YES
                 : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         if (mMotoCompactDesign) {
             for (int i = 0; i < mShelfIcons.getChildCount(); i++) {

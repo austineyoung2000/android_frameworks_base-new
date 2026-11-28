@@ -18,6 +18,8 @@
 package com.android.systemui.notifications.ui.composable
 
 import android.util.Log
+import android.view.View
+import android.view.ViewTreeObserver
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -34,11 +36,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.overscroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.withoutVisualEffect
@@ -48,10 +52,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -110,6 +116,7 @@ import com.android.systemui.scene.session.ui.composable.SaveableSession
 import com.android.systemui.scene.session.ui.composable.sessionCoroutineScope
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.shade.ui.ShadeColors
+import com.android.systemui.shade.ui.composable.rememberQsBackgroundTransparency
 import com.android.systemui.statusbar.notification.shared.NsslTouchDispatchFix
 import com.android.systemui.statusbar.notification.stack.shared.model.AccessibilityScrollEvent
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimBounds
@@ -169,14 +176,73 @@ fun ContentScope.ConstrainedNotificationStack(
     viewModel: NotificationsPlaceholderViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val stacksActive by viewModel.risingStacksActive.collectAsStateWithLifecycle(initialValue = false)
+    val stacksScrollState = rememberScrollState()
+    val rootView = LocalView.current.rootView
+    val density = LocalDensity.current
+    var availableHeightPx by remember { mutableIntStateOf(0) }
+    var widgetLimitPx by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    var infoWidgetInsetPx by remember { mutableIntStateOf(0) }
+    var viewportTopPx by remember { mutableIntStateOf(Int.MIN_VALUE) }
+    val widgetGapPx = with(density) { 8.dp.roundToPx() }
+    val fingerprintGapPx = with(density) { 12.dp.roundToPx() }
+    DisposableEffect(rootView, stacksActive) {
+        val observer = rootView.viewTreeObserver
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            val widgets = listOf(R.id.keyguard_widgets, R.id.keyguard_app_widgets)
+                .mapNotNull { rootView.findViewById<View>(it) }
+                .filter { it.isShown && it.alpha > 0f && it.height > 0 }
+            val location = IntArray(2)
+            var limit = Int.MAX_VALUE
+            var inset = 0
+            if (stacksActive && viewportTopPx != Int.MIN_VALUE) {
+                val info = rootView.findViewById<View>(R.id.keyguard_info_widgets)
+                if (info != null && info.isShown && info.alpha > 0f && info.height > 0) {
+                    info.getLocationInWindow(location)
+                    inset = (location[1] + info.height + widgetGapPx - viewportTopPx)
+                        .coerceAtLeast(0)
+                }
+                widgets.forEach { widget ->
+                    widget.getLocationInWindow(location)
+                    val top = location[1] - viewportTopPx
+                    val bottom = top + widget.height
+                    if (bottom > 0) limit = minOf(limit, (top - widgetGapPx).coerceAtLeast(0))
+                }
+            }
+            if (widgetLimitPx != limit) widgetLimitPx = limit
+            if (infoWidgetInsetPx != inset) infoWidgetInsetPx = inset
+            true
+        }
+        if (observer.isAlive) observer.addOnPreDrawListener(listener)
+        onDispose {
+            if (observer.isAlive) observer.removeOnPreDrawListener(listener)
+        }
+    }
+    LaunchedEffect(stacksActive, stacksScrollState) {
+        if (stacksActive) {
+            snapshotFlow {
+                ShadeScrollState(
+                    isScrolledToTop = stacksScrollState.value == 0,
+                    scrollPosition = stacksScrollState.value,
+                    maxScrollPosition = stacksScrollState.maxValue,
+                )
+            }.collect { viewModel.setScrollState(it) }
+        } else {
+            stacksScrollState.scrollTo(0)
+        }
+    }
     Box(
         modifier =
             modifier
-                .onSizeChanged { viewModel.onConstrainedAvailableSpaceChanged(it.height) }
+                .onSizeChanged {
+                    availableHeightPx = it.height
+                    viewModel.onConstrainedAvailableSpaceChanged(it.height)
+                }
                 .onPlaced {
                     val rawBounds = it.rawBoundsInWindow()
+                    viewportTopPx = rawBounds.top.toInt()
                     debugLog(viewModel) { "Constrained.container onPlaced bounds=$rawBounds" }
-                    viewModel.setStackBounds(rawBounds)
+                    if (!stacksActive) viewModel.setStackBounds(rawBounds)
                 }
                 .onUnplaced {
                     debugLog(viewModel) { "Constrained.container onUnplaced" }
@@ -184,18 +250,55 @@ fun ContentScope.ConstrainedNotificationStack(
                     viewModel.onLockScreenStackBottomChanged(-1f)
                 }
     ) {
-        StackPlaceholder(
-            tag = "Constrained",
-            viewModel = viewModel,
-            modifier =
-                Modifier.fillMaxWidth()
-                    .notificationStackHeight(view = stackScrollView, constrainToMaxHeight = true)
-                    .onGloballyPositioned { coordinates ->
-                        viewModel.onLockScreenStackBottomChanged(
-                            coordinates.boundsInWindow().bottom
+        if (stacksActive) {
+            Box(
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .padding(top = with(density) { infoWidgetInsetPx.toDp() })
+                        .heightIn(
+                            max = if (availableHeightPx > 0) {
+                                with(density) {
+                                    (minOf(availableHeightPx, widgetLimitPx) -
+                                        infoWidgetInsetPx - fingerprintGapPx).coerceAtLeast(0).toDp()
+                                }
+                            } else Dp.Unspecified
                         )
-                    },
-        )
+                        .onPlaced { coordinates ->
+                            viewModel.setStackBounds(coordinates.rawBoundsInWindow())
+                        }
+                        .disableSwipesWhenScrolling()
+                        .verticalScroll(stacksScrollState)
+            ) {
+                StackPlaceholder(
+                    tag = "Constrained",
+                    viewModel = viewModel,
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .notificationStackHeight(
+                                view = stackScrollView,
+                                totalVerticalPadding = 56.dp,
+                            )
+                            .onGloballyPositioned { coordinates ->
+                                viewModel.onLockScreenStackBottomChanged(
+                                    coordinates.boundsInWindow().bottom
+                                )
+                            },
+                )
+            }
+        } else {
+            StackPlaceholder(
+                tag = "Constrained",
+                viewModel = viewModel,
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .notificationStackHeight(view = stackScrollView, constrainToMaxHeight = true)
+                        .onGloballyPositioned { coordinates ->
+                            viewModel.onLockScreenStackBottomChanged(
+                                coordinates.boundsInWindow().bottom
+                            )
+                        },
+            )
+        }
         HeadsUpNotificationPlaceholder(
             tag = "Constrained",
             stackScrollView = stackScrollView,
@@ -405,6 +508,7 @@ fun ContentScope.NestedScrollingNotificationPanel(
     val density = LocalDensity.current
     val screenCornerRadius = LocalScreenCornerRadius.current
     val scrimCornerRadius = dimensionResource(R.dimen.notification_scrim_corner_radius)
+    val qsBackgroundTransparency = rememberQsBackgroundTransparency()
     val classicShadeNotificationScrimBgColor =
         Color(
             ShadeColors.classicShadeNotificationScrimBg(
@@ -415,7 +519,9 @@ fun ContentScope.NestedScrollingNotificationPanel(
                 // same color as  in the shade types where we are NOT punching a hole.
                 composited = shouldPunchHoleBehindScrim,
             )
-        )
+        ).let { color ->
+            color.copy(alpha = color.alpha * (100 - qsBackgroundTransparency) / 100f)
+        }
     val expansionFraction by viewModel.expandFraction.collectAsStateWithLifecycle(0f)
     val screenHeight = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 

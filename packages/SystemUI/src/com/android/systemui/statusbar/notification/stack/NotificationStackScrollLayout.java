@@ -494,6 +494,12 @@ public class NotificationStackScrollLayout
     private boolean mForwardScrollable;
     private boolean mBackwardScrollable;
     private NotificationShelf mShelf;
+    private boolean mRisingStacksActive;
+    // True for a gesture which began on a scrollable Stacks notification.
+    private boolean mRisingStacksLegacyScrollGesture;
+    private int mRisingStacksHeaderHeightPx;
+    private String mRisingStacksPackage;
+    private int mRisingStacksUserId = UserHandle.USER_NULL;
     private String mMotoCompactPackage;
     private int mMotoCompactUserId = UserHandle.USER_NULL;
     private final ArrayList<ExpandableNotificationRow> mMotoCompactExpandedRows = new ArrayList<>();
@@ -507,6 +513,8 @@ public class NotificationStackScrollLayout
      * shelf. -1 when there is no limit.
      */
     private int mMaxDisplayedNotifications = -1;
+    // Preserve the platform's requested limit so disabling Stacks restores it.
+    private int mRisingStacksLegacyRequestedMax = -1;
     private float mKeyguardBottomPadding = -1;
     @VisibleForTesting
     int mStatusBarHeight;
@@ -2462,7 +2470,8 @@ public class NotificationStackScrollLayout
     }
 
     private boolean isScrollingEnabled() {
-        return mScrollingEnabled;
+        return mScrollingEnabled || (!SceneContainerFlag.isEnabled()
+                && mRisingStacksActive && isMotoCompactDesignActive());
     }
 
     boolean onKeyguard() {
@@ -2835,6 +2844,25 @@ public class NotificationStackScrollLayout
         // because NSSL shouldn't control its own scrolling.
         if (SceneContainerFlag.isEnabled()) {
             return 0;
+        }
+        if (mRisingStacksActive && isMotoCompactDesignActive()) {
+            final int[] location = new int[2];
+            getLocationOnScreen(location);
+            final int viewportBottom = getRisingStacksViewportBottomOnScreen() - location[1];
+            int contentBottom = getContentHeight() + getRisingStacksHeaderHeight();
+            // Expanded groups can be taller than the stack calculator's constrained height.
+            // Include their actual on-screen extent so their lower actions remain reachable.
+            final int[] childLocation = new int[2];
+            for (int i = 0; i < getChildCount(); i++) {
+                final View child = getChildAt(i);
+                if (!(child instanceof ExpandableNotificationRow row)
+                        || !isRisingStacksPreviewRow(row) || !row.isShown()
+                        || row.getAlpha() <= 0f || !row.isLaidOut()) continue;
+                row.getLocationOnScreen(childLocation);
+                contentBottom = Math.max(contentBottom, childLocation[1] - location[1]
+                        + row.getActualHeight() + getOwnScrollY());
+            }
+            return Math.max(0, contentBottom - viewportBottom);
         }
         // In current design, it only use the top HUN to treat all of HUNs
         // although there are more than one HUNs
@@ -3979,6 +4007,13 @@ public class NotificationStackScrollLayout
      * @return Whether a y coordinate is inside the content.
      */
     public boolean isInContentBounds(float y) {
+        if (!SceneContainerFlag.isEnabled() && mRisingStacksActive
+                && isMotoCompactDesignActive()) {
+            final int[] location = new int[2];
+            getLocationOnScreen(location);
+            return y >= mAmbientState.getStackY() + getRisingStacksHeaderHeight()
+                    && y < getRisingStacksViewportBottomOnScreen() - location[1];
+        }
         if (isLockscreenNotificationLayoutActive()
                 && mStackScrollAlgorithm.getLockscreenNotificationStack().getBottom() > 0f) {
             return y < mStackScrollAlgorithm.getLockscreenNotificationStack().getBottom();
@@ -4007,6 +4042,26 @@ public class NotificationStackScrollLayout
      * @param ev A MotionEvent that's dispatched to the NSSL
      * @return True when the NSSL wants to prevent its descendants to get the MotionEvent.
      */
+    /** Whether this motion belongs to the legacy lockscreen Stacks scroller. */
+    boolean isRisingStacksLegacyScrollGesture() {
+        return mRisingStacksLegacyScrollGesture;
+    }
+
+    private void beginRisingStacksScrollGesture(MotionEvent ev) {
+        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return;
+        mRisingStacksLegacyScrollGesture = false;
+        if (SceneContainerFlag.isEnabled() || !mRisingStacksActive
+                || !isMotoCompactDesignActive() || getScrollRange() <= 0
+                || !isInScrollableRegion(ev)) return;
+        final ExpandableView child = getChildAtPosition(
+                ev.getX(), ev.getY(), false, false, true);
+        if (!(child instanceof ExpandableNotificationRow)
+                || !isRisingStacksPreviewRow(child)) return;
+        mRisingStacksLegacyScrollGesture = true;
+        // Keep a vertical drag inside the cards from becoming a lockscreen unlock gesture.
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+    }
+
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         if (SceneContainerFlag.isEnabled()) {
@@ -4164,6 +4219,7 @@ public class NotificationStackScrollLayout
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        beginRisingStacksScrollGesture(ev);
         closeMotoCompactPreviewIfOutsideTouch(ev);
         final boolean collapseStack = handleLockscreenStackCollapseTouch(ev);
         MotionEvent dispatchedEvent = ev;
@@ -4179,6 +4235,9 @@ public class NotificationStackScrollLayout
             if (dispatchedEvent != ev) {
                 dispatchedEvent.recycle();
             }
+            if (ev.getActionMasked() == ACTION_UP || ev.getActionMasked() == ACTION_CANCEL) {
+                mRisingStacksLegacyScrollGesture = false;
+            }
         }
         if (collapseStack && mController != null && !mController.isFalseStackTap()) {
             setLockscreenNotificationStackExpanded(false);
@@ -4188,7 +4247,7 @@ public class NotificationStackScrollLayout
     }
 
     private boolean dispatchTouchEventToSceneAndChildren(MotionEvent ev) {
-        if (NsslTouchDispatchFix.isEnabled()) {
+        if (NsslTouchDispatchFix.isEnabled() && !mRisingStacksLegacyScrollGesture) {
             // IMPORTANT: Dispatch to super first to handle standard touch routing.
             // This triggers side effects on subsequent events (like ACTION_MOVE), potentially
             // mutating mGestureReachedScroller to true, or calling claimTouchFromSceneFramework.
@@ -4473,7 +4532,9 @@ public class NotificationStackScrollLayout
     }
 
     boolean onScrollTouch(MotionEvent ev) {
-        NsslTouchDispatchFix.assertInLegacyMode();
+        if (!mRisingStacksLegacyScrollGesture) {
+            NsslTouchDispatchFix.assertInLegacyMode();
+        }
         if (!isScrollingEnabled()) {
             return false;
         }
@@ -4733,6 +4794,13 @@ public class NotificationStackScrollLayout
     @VisibleForTesting
     boolean isInScrollableRegion(MotionEvent ev) {
         if (!SceneContainerFlag.isEnabled()) {
+            if (mRisingStacksActive && isMotoCompactDesignActive()) {
+                final int[] location = new int[2];
+                getLocationOnScreen(location);
+                final float top = mAmbientState.getStackY() + getRisingStacksHeaderHeight();
+                final float bottom = getRisingStacksViewportBottomOnScreen() - location[1];
+                return ev.getY() >= top && ev.getY() < bottom && !isInsideQsHeader(ev);
+            }
             return !isInsideQsHeader(ev);
         }
         ShadeScrimShape shape = mScrollViewFields.clippingShape;
@@ -6138,6 +6206,10 @@ public class NotificationStackScrollLayout
 
     @Override
     public void setMaxDisplayedNotifications(int maxDisplayedNotifications) {
+        if (!SceneContainerFlag.isEnabled()) {
+            mRisingStacksLegacyRequestedMax = maxDisplayedNotifications;
+            if (mRisingStacksActive && onKeyguard()) maxDisplayedNotifications = -1;
+        }
         if (mMaxDisplayedNotifications != maxDisplayedNotifications) {
             if (mLogger != null) {
                 mLogger.setMaxDisplayedNotifications(maxDisplayedNotifications);
@@ -6146,7 +6218,7 @@ public class NotificationStackScrollLayout
             if (SceneContainerFlag.isEnabled()) {
                 updateIntrinsicStackHeight();
                 updateStackEndHeightAndStackHeight(mAmbientState.getExpansionFraction());
-                if (maxDisplayedNotifications == -1) {
+                if (maxDisplayedNotifications == -1 && !mRisingStacksActive) {
                     animateGoToFullShade(0);
                 }
             } else {
@@ -6290,6 +6362,8 @@ public class NotificationStackScrollLayout
     public float getMotoCompactPreviewTopOffset() {
         if (!isMotoCompactPreviewVisible() || mAmbientState.getDozeAmount() > 0f) return 0f;
         final View root = getRootView();
+        // Stacks follows the keyguard notification bounds for every clock and media state.
+        if (mRisingStacksActive) return 0f;
         root.getLocationOnScreen(mTempInt2);
         final int rootTop = mTempInt2[1];
         getLocationOnScreen(mTempInt2);
@@ -6302,6 +6376,13 @@ public class NotificationStackScrollLayout
         final float stackTop = SceneContainerFlag.isEnabled()
                 ? mAmbientState.getStackScrollTop() : mAmbientState.getTopPadding();
         return Math.max(0f, stackTop - previewTop);
+    }
+
+    /** Recompute compact preview placement as the lockscreen media player appears or leaves. */
+    public void onRisingStacksMediaVisibilityChanged() {
+        if (!mRisingStacksActive) return;
+        updateContentHeight();
+        requestChildrenUpdate();
     }
 
     private final java.util.WeakHashMap<ExpandableView, Float> mMotoAwakeScreenY =
@@ -6416,8 +6497,108 @@ public class NotificationStackScrollLayout
         requestChildrenUpdate();
     }
 
+    public boolean isRisingStacksActive() {
+        return mRisingStacksActive;
+    }
+
+    /** True for cards displayed in the Rising Stacks lockscreen preview. */
+    public boolean isRisingStacksPreviewRow(ExpandableView view) {
+        return mRisingStacksActive && isMotoCompactDesignActive()
+                && isMotoCompactNotificationSelected(view);
+    }
+
+    /** Bottom edge of the Stacks notification viewport in screen coordinates. */
+    public int getRisingStacksViewportBottomOnScreen() {
+        if (!mRisingStacksActive) return -1;
+        final View root = getRootView();
+        final int[] rootLocation = new int[2];
+        root.getLocationOnScreen(rootLocation);
+        if (SceneContainerFlag.isEnabled()) {
+            return rootLocation[1] + Math.round(mAmbientState.getStackBounds().bottom);
+        }
+        // Use the actual lock icon as the boundary, and leave space for the device-info row.
+        int bottom = rootLocation[1] + root.getHeight();
+        final View fingerprint = root.findViewById(R.id.device_entry_icon_view);
+        boolean hasFingerprintBoundary = false;
+        if (fingerprint != null && fingerprint.getHeight() > 0
+                && fingerprint.getHeight() < root.getHeight() / 3) {
+            final int[] location = new int[2];
+            fingerprint.getLocationOnScreen(location);
+            if (location[1] > rootLocation[1] + root.getHeight() / 3) {
+                bottom = Math.min(bottom, location[1]);
+                hasFingerprintBoundary = true;
+            }
+        }
+        if (!hasFingerprintBoundary && mKeyguardBottomPadding >= 0) {
+            final int[] location = new int[2];
+            getLocationOnScreen(location);
+            bottom = Math.min(bottom, location[1] + getHeight() - (int) mKeyguardBottomPadding);
+        }
+        // Widgets normally live above the notification placeholder. Only reserve their
+        // actual top edge if a configured widget is below the start of this viewport.
+        final int[] stackLocation = new int[2];
+        getLocationOnScreen(stackLocation);
+        final float stackTop = stackLocation[1] + mAmbientState.getStackY();
+        final int gap = Math.round(12f * getResources().getDisplayMetrics().density);
+        final int[] widgetLocation = new int[2];
+        for (int id : new int[] {R.id.keyguard_info_widgets, R.id.keyguard_widgets,
+                R.id.keyguard_app_widgets}) {
+            final View widget = root.findViewById(id);
+            if (widget == null || !widget.isShown() || widget.getAlpha() <= 0f
+                    || widget.getHeight() <= 0) continue;
+            widget.getLocationOnScreen(widgetLocation);
+            if (widgetLocation[1] > stackTop && widgetLocation[1] < bottom) {
+                bottom = widgetLocation[1];
+            }
+        }
+        return bottom - gap;
+    }
+
+    /** The offset already applied by the active notification scrolling container. */
+    public int getRisingStacksScrollOffset() {
+        if (!mRisingStacksActive) return 0;
+        return SceneContainerFlag.isEnabled()
+                ? mScrollViewFields.scrollState.getScrollPosition() : getOwnScrollY();
+    }
+
+    /** Vertical space reserved for the app selector above lock-screen notification cards. */
+    public int getRisingStacksHeaderHeight() {
+        if (!mRisingStacksActive || !isMotoCompactDesignActive()) return 0;
+        return mRisingStacksHeaderHeightPx > 0 ? mRisingStacksHeaderHeightPx
+                : Math.round(56f * getResources().getDisplayMetrics().density);
+    }
+
+    /** Keep the preview viewport and stack algorithm in sync with the selector's size. */
+    public void setRisingStacksHeaderHeight(int heightPx) {
+        int height = Math.max(0, heightPx);
+        if (mRisingStacksHeaderHeightPx == height) return;
+        mRisingStacksHeaderHeightPx = height;
+        requestChildrenUpdate();
+        requestLayout();
+        notifyHeightChangeListener(null, false);
+    }
+
+    public void setRisingStacksState(boolean active, String packageName, int userId) {
+        if (mRisingStacksActive == active
+                && java.util.Objects.equals(mRisingStacksPackage, packageName)
+                && mRisingStacksUserId == userId) return;
+        final boolean modeChanged = mRisingStacksActive != active;
+        mRisingStacksActive = active;
+        mRisingStacksPackage = active ? packageName : null;
+        mRisingStacksUserId = active ? userId : UserHandle.USER_NULL;
+        if (modeChanged) {
+            finishMotoCompactSelection();
+            mStackScrollAlgorithm.getLockscreenNotificationStack().reset();
+            if (!SceneContainerFlag.isEnabled()) {
+                setMaxDisplayedNotifications(mRisingStacksLegacyRequestedMax);
+            }
+        }
+        updateMotoCompactPreview();
+        if (mShelf != null) mShelf.onRisingStacksModeChanged();
+    }
+
     public boolean isMotoCompactDesignActive() {
-        return mShelf != null && mShelf.isMotoCompactDesignEnabled()
+        return mShelf != null && (mShelf.isMotoCompactDesignEnabled() || mRisingStacksActive)
                 && mStackScrollAlgorithm != null
                 && (SceneContainerFlag.isEnabled() ? mIsOnLockscreen : onKeyguard())
                 && !mAmbientState.isPulsing() && !mAmbientState.isPulseExpanding()
@@ -6458,6 +6639,11 @@ public class NotificationStackScrollLayout
     }
 
     public boolean isMotoCompactAppSelected(StatusBarNotification notification) {
+        if (mRisingStacksActive) {
+            return notification != null && (mRisingStacksPackage == null
+                    || (mRisingStacksPackage.equals(notification.getPackageName())
+                    && mRisingStacksUserId == notification.getUserId()));
+        }
         return notification != null && mMotoCompactPackage != null
                 && mMotoCompactPackage.equals(notification.getPackageName())
                 && mMotoCompactUserId == notification.getUserId();
@@ -6479,7 +6665,7 @@ public class NotificationStackScrollLayout
     }
 
     public void toggleMotoCompactApp(StatusBarIconView icon) {
-        if (icon == null) return;
+        if (icon == null || mRisingStacksActive) return;
         final StatusBarNotification notification = icon.getNotification();
         if (!isMotoCompactDesignActive() || !isLockscreenNotificationLayoutActive()
                 || notification == null) return;
@@ -6605,7 +6791,7 @@ public class NotificationStackScrollLayout
     }
 
     private boolean isLockscreenNotificationStackInteractive() {
-        return isLockscreenNotificationLayoutActive()
+        return !mRisingStacksActive && isLockscreenNotificationLayoutActive()
                 && mStackScrollAlgorithm.getLockscreenNotificationStack().isEnabled();
     }
 
@@ -6750,6 +6936,16 @@ public class NotificationStackScrollLayout
             println(pw, "suppressChildrenMeasureLayout", mSuppressChildrenMeasureAndLayout);
             println(pw, "hideAmount", mAmbientState.getHideAmount());
             println(pw, "maxDisplayedNotifications", mMaxDisplayedNotifications);
+            println(pw, "risingStacksActive", mRisingStacksActive);
+            println(pw, "risingStacksSceneContainer", SceneContainerFlag.isEnabled());
+            println(pw, "risingStacksViewportBottomOnScreen",
+                    getRisingStacksViewportBottomOnScreen());
+            println(pw, "risingStacksHeaderHeight", getRisingStacksHeaderHeight());
+            if (!SceneContainerFlag.isEnabled()) {
+                println(pw, "risingStacksLegacyRequestedMax", mRisingStacksLegacyRequestedMax);
+                println(pw, "risingStacksLegacyScrollRange", getScrollRange());
+                println(pw, "risingStacksEffectiveScrolling", isScrollingEnabled());
+            }
             println(pw, "bottomPadding", mBottomPadding);
             dumpRoundedRectClipping(pw);
             println(pw, "translationX", getTranslationX());
@@ -6803,6 +6999,9 @@ public class NotificationStackScrollLayout
                         ExpandableView child = getChildAtIndex(i);
                         pw.println();
                         verifyOutline(pw, child);
+                        if (mRisingStacksActive) {
+                            pw.println("risingStacksPreviewRow=" + isRisingStacksPreviewRow(child));
+                        }
                         child.dump(pw, args);
                         pw.println();
                     }
@@ -7585,9 +7784,30 @@ public class NotificationStackScrollLayout
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
         final int saveCount = mMotoCompactAnimator.prepareCanvas(canvas, child);
+        int stacksClipSave = -1;
+        if (child instanceof ExpandableView row && isRisingStacksPreviewRow(row)
+                && !mLaunchingNotification) {
+            // With the compact shelf disabled for preview cards, the scroll viewport becomes
+            // their clipping boundary. Keep overflow away from widgets and the fingerprint area.
+            final int[] location = new int[2];
+            final float top;
+            final float bottom;
+            if (SceneContainerFlag.isEnabled()) {
+                getLocationInWindow(location);
+                top = mAmbientState.getStackBounds().top - location[1];
+                bottom = mAmbientState.getStackBounds().bottom - location[1];
+            } else {
+                getLocationOnScreen(location);
+                top = mAmbientState.getStackY() + getRisingStacksHeaderHeight();
+                bottom = getRisingStacksViewportBottomOnScreen() - location[1];
+            }
+            stacksClipSave = canvas.save();
+            canvas.clipRect(0, top, getWidth(), Math.max(top, bottom));
+        }
         try {
             return drawChildWithStackClipping(canvas, child, drawingTime);
         } finally {
+            if (stacksClipSave >= 0) canvas.restoreToCount(stacksClipSave);
             if (saveCount >= 0) canvas.restoreToCount(saveCount);
         }
     }

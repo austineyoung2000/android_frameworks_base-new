@@ -2182,7 +2182,11 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                     && !skipForDragging && mSwipeHelper.onInterceptTouchEvent(ev);
 
             final boolean expandWantsIt;
-            if (NsslTouchDispatchFix.isEnabled()) {
+            if (mView.isRisingStacksLegacyScrollGesture()) {
+                // Let an overflowing Stacks list scroll; notification expansion controls
+                // remain clickable when the user taps rather than drags.
+                expandWantsIt = false;
+            } else if (NsslTouchDispatchFix.isEnabled()) {
                 // Intercept the touches as soon as the swipe starts to expand a Notification,
                 // otherwise this gesture might be interpreted as a click on the Notification.
                 expandWantsIt = mView.isExpandingNotification();
@@ -2279,7 +2283,9 @@ public class NotificationStackScrollLayoutController implements Dumpable {
             boolean expandingNotification = mView.isExpandingNotification();
 
             final boolean showTouchToExpandHelper;
-            if (NsslTouchDispatchFix.isEnabled()) {
+            if (mView.isRisingStacksLegacyScrollGesture()) {
+                showTouchToExpandHelper = false;
+            } else if (NsslTouchDispatchFix.isEnabled()) {
                 showTouchToExpandHelper = false;
                 // Handle the touch if it was used for expanding a notification.
                 expandWantsIt = mView.isExpandingNotification() || mView.getExpandedInThisMotion();
@@ -2330,7 +2336,8 @@ public class NotificationStackScrollLayoutController implements Dumpable {
                     && mSwipeHelper.onTouchEvent(ev);
 
             final boolean scrollerWantsIt;
-            if (NsslTouchDispatchFix.isEnabled()) {
+            if (NsslTouchDispatchFix.isEnabled()
+                    && !mView.isRisingStacksLegacyScrollGesture()) {
                 // Propose this touch event to the scroller if it might be used for:
                 //  - Dragging over Lockscreen (to open the Shade)
                 //  - Dragging on the scrollable stack (to scroll the placeholder)

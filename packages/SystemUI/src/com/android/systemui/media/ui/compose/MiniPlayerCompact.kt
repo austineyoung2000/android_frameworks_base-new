@@ -18,6 +18,12 @@ package com.android.systemui.media.ui.compose
 
 import android.content.Context
 import android.content.Intent
+import android.app.ActivityManager
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.provider.Settings
+import android.service.quicksettings.Tile.STATE_ACTIVE
+import android.service.quicksettings.Tile.STATE_INACTIVE
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,19 +40,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.media.ui.viewmodel.MiniPlayerViewModel
+import com.android.systemui.statusbar.notification.row.NotificationBackgroundView
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileUsesNeon
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileSelectedStyle
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonHaloModifier
 
 @Composable
 fun MiniPlayerCompact(
     viewModel: MiniPlayerViewModel,
     compact: Boolean = true,
     expansionProgress: Float = if (compact) 0f else 1f, // Kept to not break QSFragmentCompose but ignored for animations
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    notificationAppearance: Boolean = false
 ) {
     val context = LocalContext.current
     val mediaState by viewModel.mediaState.collectAsStateWithLifecycle()
@@ -64,12 +81,24 @@ fun MiniPlayerCompact(
     val textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha)
     val iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha)
 
-    val shape = RoundedCornerShape(28.dp)
+    val tileSettings = rememberCustomLabelColors()
+    val shape = if (notificationAppearance) RoundedCornerShape(28.dp) else when (tileSettings.tileShape) {
+        1 -> RoundedCornerShape(0.dp)
+        2 -> RoundedCornerShape(14.dp)
+        3 -> RoundedCornerShape(topStart = 24.dp, topEnd = 2.dp,
+            bottomEnd = 24.dp, bottomStart = 2.dp)
+        4 -> RoundedCornerShape(50)
+        else -> RoundedCornerShape(28.dp)
+    }
+    val tileState = if (mediaState.isPlaying) STATE_ACTIVE else STATE_INACTIVE
+    val isNeon = !notificationAppearance && qsTileUsesNeon(tileSettings, tileState)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .height(height)
+            .then(if (notificationAppearance) Modifier else
+                qsTileNeonHaloModifier(tileSettings, tileState, shape))
             .clickable {
                 if (mediaState.hasActiveMedia && mediaState.packageName != null) {
                     openMediaApp(context, mediaState.packageName!!)
@@ -83,20 +112,26 @@ fun MiniPlayerCompact(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(shape)
-                .background(color = bgColor)
+                .then(if (notificationAppearance) Modifier else Modifier.clip(shape))
+                .background(color = if (isNeon || notificationAppearance) Color.Transparent else bgColor)
                 .border(
                     width = 1.dp,
-                    color = borderColor,
+                    color = if (isNeon || notificationAppearance) Color.Transparent else borderColor,
                     shape = shape
                 )
-                .padding(
-                    horizontal = 16.dp,
-                    vertical = if (compact) 12.dp else 14.dp
-                )
+                .then(if (notificationAppearance) Modifier else
+                    qsTileBackgroundModifier(tileSettings, tileState, shape))
+                .then(if (notificationAppearance) Modifier else
+                    qsTileStyleModifier(qsTileSelectedStyle(tileSettings, tileState), tileState, shape))
+                .then(if (notificationAppearance) Modifier else
+                    qsTileNeonModifier(tileSettings, tileState, shape))
         ) {
+            if (notificationAppearance) {
+                NotificationMediaBackground(Modifier.matchParentSize(), bgColor.toArgb())
+            }
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.padding(horizontal = 16.dp,
+                    vertical = if (compact) 12.dp else 14.dp).fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -189,6 +224,55 @@ fun MiniPlayerCompact(
             }
         }
     }
+}
+
+
+/** Uses the same notification background renderer and live settings as notification cards. */
+@Composable
+private fun NotificationMediaBackground(modifier: Modifier, nativeColor: Int) {
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            NotificationBackgroundView(context, null).apply {
+                fun updateFill() {
+                    val resolver = context.contentResolver
+                    val user = ActivityManager.getCurrentUser()
+                    val mode = Settings.System.getIntForUser(resolver,
+                        "notification_card_color_mode", 0, user)
+                    var first = Settings.System.getIntForUser(resolver,
+                        "notification_card_color_first", android.graphics.Color.MAGENTA, user)
+                    var second = if (mode == 2 || mode == 4 || mode == 6)
+                        Settings.System.getIntForUser(resolver, "notification_card_color_second",
+                            android.graphics.Color.BLUE, user) else first
+                    if (mode == 0) { first = nativeColor; second = nativeColor }
+                    if (mode == 5 || mode == 6) {
+                        val transparency = Settings.System.getIntForUser(resolver,
+                            "notification_card_neon_transparency", 78, user).coerceIn(0, 100)
+                        val maxAlpha = (100 - transparency) * 255 / 100
+                        first = (first and 0x00ffffff) or
+                            (minOf(android.graphics.Color.alpha(first), maxAlpha) shl 24)
+                        second = (second and 0x00ffffff) or
+                            (minOf(android.graphics.Color.alpha(second), maxAlpha) shl 24)
+                    }
+                    val fill = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                        intArrayOf(first, second))
+                    val stateOverlay = GradientDrawable().apply {
+                        setColor(android.graphics.Color.TRANSPARENT)
+                    }
+                    setCustomBackground(LayerDrawable(arrayOf(fill, stateOverlay)))
+                    setTint(nativeColor)
+                }
+                setCardAppearanceChangedListener { updateFill() }
+                updateFill()
+                addOnLayoutChangeListener { _, left, top, right, bottom, _, _, _, _ ->
+                    val radius = 28f * context.resources.displayMetrics.density
+                    setRadius(radius, radius)
+                    setActualWidth(right - left)
+                    setActualHeight(bottom - top)
+                }
+            }
+        },
+    )
 }
 
 private fun openMediaApp(context: Context, pkg: String) {

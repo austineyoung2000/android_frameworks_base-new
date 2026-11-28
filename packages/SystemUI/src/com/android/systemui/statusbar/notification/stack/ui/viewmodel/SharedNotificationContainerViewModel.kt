@@ -379,7 +379,7 @@ constructor(
             .distinctUntilChanged()
             .dumpWhileCollecting("configurationBasedDimensions")
 
-    private val isOnAnyBouncer: Flow<Boolean> =
+    val isOnAnyBouncer: Flow<Boolean> =
         anyOf(
             keyguardTransitionInteractor.transitionValue(ALTERNATE_BOUNCER).map { it > 0f },
             keyguardTransitionInteractor
