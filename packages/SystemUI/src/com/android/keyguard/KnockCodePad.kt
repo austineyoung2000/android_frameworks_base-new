@@ -17,6 +17,11 @@
 package com.android.keyguard
 
 import android.view.HapticFeedbackConstants
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -26,6 +31,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -69,6 +76,18 @@ fun KnockCodePad(state: KnockCodeUiState, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     val view = LocalView.current
     val density = LocalDensity.current
+    val resolver = view.context.contentResolver
+    val keys = listOf("rising_knock_effect", "rising_knock_first_color",
+        "rising_knock_second_color", "rising_knock_glow_intensity", "rising_knock_neon_transparency")
+    var appearance by remember { mutableStateOf(readKnockAppearance(view)) }
+    DisposableEffect(resolver) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { appearance = readKnockAppearance(view) }
+        }
+        keys.forEach { resolver.registerContentObserver(Settings.System.getUriFor(it), false, observer, UserHandle.USER_ALL) }
+        appearance = readKnockAppearance(view)
+        onDispose { resolver.unregisterContentObserver(observer) }
+    }
     val scope = rememberCoroutineScope()
 
     val cellInset = dimensionResource(R.dimen.knock_code_quadrant_inset)
@@ -181,15 +200,35 @@ fun KnockCodePad(state: KnockCodeUiState, modifier: Modifier = Modifier) {
             }
 
             translate(left = shake.value) {
+                val custom = appearance.effect != 0
+                val neon = appearance.effect == 3 || appearance.effect == 4
+                val first = if (custom) Color(appearance.first) else scheme.outline
+                val second = if (appearance.effect == 2 || appearance.effect == 4)
+                    Color(appearance.second) else first
+                val brush = Brush.horizontalGradient(listOf(first, second),
+                    startX = geometry.square.left, endX = geometry.square.right)
+                if (neon) {
+                    for (layer in 8 downTo 1) {
+                        drawRoundRect(brush = brush, topLeft = geometry.square.topLeft,
+                            size = geometry.square.size, cornerRadius = CornerRadius(cornerPx, cornerPx),
+                            alpha = appearance.intensity / 100f * .05f,
+                            style = Stroke(width = strokePx + layer * 2f * density.density))
+                    }
+                }
+                if (custom) {
+                    drawRoundRect(brush = brush, topLeft = geometry.square.topLeft,
+                        size = geometry.square.size, cornerRadius = CornerRadius(cornerPx, cornerPx),
+                        alpha = if (neon) (100 - appearance.transparency) / 100f else .3f)
+                }
                 drawCellSeparators(
                     geometry = geometry,
                     gridSize = state.gridSize,
-                    color = scheme.outline,
+                    brush = brush,
                     strokeWidth = strokePx,
                 )
 
                 drawRoundRect(
-                    color = scheme.outline,
+                    brush = brush,
                     topLeft = geometry.square.topLeft,
                     size = geometry.square.size,
                     cornerRadius = CornerRadius(cornerPx, cornerPx),
@@ -207,8 +246,8 @@ fun KnockCodePad(state: KnockCodeUiState, modifier: Modifier = Modifier) {
                 drawProgressDots(
                     geometry = geometry,
                     tapCount = state.tapCount,
-                    filledColor = scheme.primary,
-                    emptyColor = scheme.onSurfaceVariant,
+                    filledColor = if (custom) first else scheme.primary,
+                    emptyColor = if (custom) second else scheme.onSurfaceVariant,
                     radius = dotRadiusPx,
                     spacing = dotSpacingPx,
                     strokeWidth = dotStrokePx,
@@ -216,6 +255,18 @@ fun KnockCodePad(state: KnockCodeUiState, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+private data class KnockAppearance(val effect: Int, val first: Int, val second: Int, val intensity: Int, val transparency: Int)
+
+private fun readKnockAppearance(view: android.view.View): KnockAppearance {
+    val r = view.context.contentResolver
+    fun setting(key: String, default: Int) = Settings.System.getIntForUser(r, key, default, UserHandle.USER_CURRENT)
+    return KnockAppearance(setting("rising_knock_effect", 0).coerceIn(0, 4),
+        setting("rising_knock_first_color", 0xff6200ee.toInt()),
+        setting("rising_knock_second_color", 0xff0000ff.toInt()),
+        setting("rising_knock_glow_intensity", 60).coerceIn(0, 100),
+        setting("rising_knock_neon_transparency", 84).coerceIn(0, 100))
 }
 
 private data class PadGeometry(val square: Rect, val dotsY: Float)
@@ -258,7 +309,7 @@ private fun colFor(geometry: PadGeometry, gridSize: Int, x: Float): Int {
 private fun DrawScope.drawCellSeparators(
     geometry: PadGeometry,
     gridSize: Int,
-    color: Color,
+    brush: Brush,
     strokeWidth: Float,
 ) {
     val step = geometry.square.width / gridSize
@@ -266,13 +317,13 @@ private fun DrawScope.drawCellSeparators(
         val x = geometry.square.left + i * step
         val y = geometry.square.top + i * step
         drawLine(
-            color = color,
+            brush = brush,
             start = Offset(x, geometry.square.top),
             end = Offset(x, geometry.square.bottom),
             strokeWidth = strokeWidth,
         )
         drawLine(
-            color = color,
+            brush = brush,
             start = Offset(geometry.square.left, y),
             end = Offset(geometry.square.right, y),
             strokeWidth = strokeWidth,

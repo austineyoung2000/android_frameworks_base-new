@@ -22,6 +22,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
@@ -48,6 +49,40 @@ import com.android.systemui.res.R;
  * non six digit pin on their device
  */
 public class PinShapeNonHintingView extends LinearLayout implements PinShapeInput {
+    private final PinViewDecoration mPinDecoration = new PinViewDecoration(this, this::refreshPinShapeColors);
+    private void refreshPinShapeColors() {
+        for (int i = 0; i < Math.min(mPosition, getChildCount()); i++) {
+            View child = getChildAt(i);
+            if (child instanceof ImageView && ((ImageView) child).getDrawable() != null) {
+                ((ImageView) child).getDrawable().mutate().setTint(getPinShapeColor());
+            }
+        }
+    }
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mPinDecoration.attach();
+    }
+    @Override protected void onDetachedFromWindow() {
+        mPinDecoration.detach();
+        super.onDetachedFromWindow();
+    }
+    @Override protected void dispatchDraw(Canvas canvas) {
+        if (mPinDecoration.active()) {
+            // Decorate only entered indicators; leave unused PIN hints visually distinct.
+            for (int i = 0; i < getChildCount(); i++) {
+                View dot = getChildAt(i);
+                if (dot.getVisibility() != View.VISIBLE) continue;
+                canvas.save();
+                canvas.translate(dot.getX() + dot.getWidth() / 2f, dot.getY() + dot.getHeight() / 2f);
+                canvas.scale(dot.getScaleX(), dot.getScaleY());
+                canvas.translate(-dot.getWidth() / 2f, -dot.getHeight() / 2f);
+                mPinDecoration.draw(canvas, dot.getWidth(), dot.getHeight());
+                canvas.restore();
+            }
+        }
+        super.dispatchDraw(canvas);
+    }
+
     private static final int RESET_STAGGER_DELAY = 40;
     private static final int RESET_MAX_DELAY = 200;
     @Deprecated
@@ -234,6 +269,7 @@ public class PinShapeNonHintingView extends LinearLayout implements PinShapeInpu
     }
 
     private int getPinShapeColor() {
+        if (mPinDecoration.customColor()) return mPinDecoration.firstColor();
         if (Flags.bouncerUiRevamp2()) {
             return mContext.getColor(Color.shape);
         } else {
