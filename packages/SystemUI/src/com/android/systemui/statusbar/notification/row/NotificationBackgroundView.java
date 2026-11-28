@@ -124,6 +124,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private boolean mIsBlurSupported = false;
     private int mCardColorMode;
     private int mCardGlowIntensity;
+    private int mCardNeonTransparency;
     private Bitmap mCardGlowBitmap;
     private int mCardGlowBitmapWidth;
     private int mCardGlowBitmapHeight;
@@ -134,6 +135,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
     private int mCardColorFirst = Color.MAGENTA;
     private int mCardColorSecond = Color.BLUE;
     private int mCardStyle;
+    @Nullable private Runnable mCardAppearanceChangedListener;
     private boolean mHadCustomCardColor;
     private final Paint mCardStylePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TunerService.Tunable mCardAppearanceTunable = (key, value) ->
@@ -150,10 +152,33 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 "notification_card_color_second", Color.BLUE, UserHandle.USER_CURRENT);
         mCardGlowIntensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(resolver,
                 "notification_card_glow_intensity", 60, UserHandle.USER_CURRENT)));
-        mCardStyle = Settings.System.getIntForUser(resolver,
-                "notification_card_style", 0, UserHandle.USER_CURRENT);
+        mCardNeonTransparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(resolver,
+                "notification_card_neon_transparency", 78, UserHandle.USER_CURRENT)));
+        mCardStyle = mCardColorMode == 0 ? Settings.System.getIntForUser(resolver,
+                "notification_card_style", 0, UserHandle.USER_CURRENT) : 0;
+        if (getParent() instanceof ActivatableNotificationView) {
+            ((ActivatableNotificationView) getParent()).onBackgroundGlowChanged();
+        }
         updateCardBlur();
         invalidate();
+        if (mCardAppearanceChangedListener != null) mCardAppearanceChangedListener.run();
+    }
+
+    /** Whether the user chose a non-native notification color or style. */
+    public boolean hasCustomCardAppearance() {
+        return mCardColorMode != 0 || mCardStyle != 0;
+    }
+
+    public void setCardAppearanceChangedListener(@Nullable Runnable listener) {
+        mCardAppearanceChangedListener = listener;
+    }
+
+    int getGlowPadding() {
+        if ((mCardColorMode != 5 && mCardColorMode != 6) || mCardGlowIntensity <= 0) {
+            return 0;
+        }
+        return (int) Math.ceil((2f + 14f * mCardGlowIntensity / 100f)
+                * getResources().getDisplayMetrics().density * 3f);
     }
 
     private boolean usesCustomCardBlur() {
@@ -240,7 +265,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
         Dependency.get(TunerService.class).addTunable(mCardAppearanceTunable,
                 "system:notification_card_color_mode", "system:notification_card_color_first",
                 "system:notification_card_color_second", "system:notification_card_style",
-                "system:notification_card_glow_intensity");
+                "system:notification_card_glow_intensity", "system:notification_card_neon_transparency");
         CrossWindowBlurListeners.getInstance().addListener(
                 getContext().getMainExecutor(), mCardBlurListener);
         updateCardBlur();
@@ -300,8 +325,15 @@ public class NotificationBackgroundView extends View implements Dumpable,
         if (clipTop + clipBottomAmount < getActualHeight() || mExpandAnimationRunning) {
             canvas.save();
             if (!mExpandAnimationRunning) {
-                canvas.clipRect(0, clipTop, getWidth(),
-                        getActualHeight() - clipBottomAmount);
+                // Allow the neon halo outside an unclipped card edge, while still honoring
+                // the stack's clipping when cards overlap or scroll out of view.
+                boolean neon = (mCardColorMode == 5 || mCardColorMode == 6)
+                        && mCardGlowIntensity > 0;
+                int glowPadding = neon ? getGlowPadding() : 0;
+                canvas.clipRect(-glowPadding, clipTop > 0 ? clipTop : -glowPadding,
+                        getWidth() + glowPadding, clipBottomAmount > 0
+                                ? getActualHeight() - clipBottomAmount
+                                : getActualHeight() + glowPadding);
             }
 
             if (!NotificationAddXOnHoverToDismiss.isEnabled()) {
@@ -335,7 +367,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 boolean drewAxBlur = drawAxBlurBackground(canvas, backgroundBounds);
                 if (mCardColorMode != 0 || shouldDrawFallbackBackground(drewAxBlur)) {
                     mBackground.setBounds(backgroundBounds);
-                    mBackground.draw(canvas);
+                    drawNeonClippedBackground(canvas, mBackground, backgroundBounds);
                 }
             }
 
@@ -381,16 +413,22 @@ public class NotificationBackgroundView extends View implements Dumpable,
         Path path = new Path();
         path.addRoundRect(rect, mCornerRadii, Path.Direction.CW);
         canvas.save();
+        int second = mCardColorMode == 6 ? mCardColorSecond : mCardColorFirst;
+        float density = getResources().getDisplayMetrics().density;
+        // The soft halo must be drawn before the card-shaped clip; only the sharp edge
+        // strokes below should be restricted to the inside of the notification.
+        // Keep the filled blur outside the card so it cannot wash out the selected style.
+        canvas.save();
+        canvas.clipOutPath(path);
+        drawCachedCardGlow(canvas, bounds, density, second);
+        canvas.restore();
         canvas.clipPath(path);
         Paint paint = mCardStylePaint;
         paint.reset();
         paint.setAntiAlias(true);
         paint.setStyle(Paint.Style.STROKE);
-        int second = mCardColorMode == 6 ? mCardColorSecond : mCardColorFirst;
         paint.setShader(new LinearGradient(rect.left, rect.top, rect.right, rect.top,
                 mCardColorFirst, second, Shader.TileMode.CLAMP));
-        float density = getResources().getDisplayMetrics().density;
-        drawCachedCardGlow(canvas, bounds, density, second);
         for (int layer = 5; layer >= 1; layer--) {
             paint.setStrokeWidth(layer * 2 * density);
             int alpha = mDrawableAlpha * mCardGlowIntensity / 100;
@@ -411,7 +449,7 @@ public class NotificationBackgroundView extends View implements Dumpable,
                 || mCardGlowBitmapHeight != height || mCardGlowBitmapRadiiHash != radiiHash
                 || mCardGlowBitmapDensity != density) {
             final float blur = (2f + 14f * mCardGlowIntensity / 100f) * density;
-            final int padding = (int) Math.ceil(blur * 2f);
+            final int padding = (int) Math.ceil(blur * 3f);
             final float scale = 0.5f;
             final int bitmapWidth = Math.max(1, (int) Math.ceil((width + 2 * padding) * scale));
             final int bitmapHeight = Math.max(1, (int) Math.ceil((height + 2 * padding) * scale));
@@ -422,8 +460,8 @@ public class NotificationBackgroundView extends View implements Dumpable,
             Path localPath = new Path();
             localPath.addRoundRect(new RectF(0, 0, width, height), mCornerRadii, Path.Direction.CW);
             Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
-            glow.setStyle(Paint.Style.STROKE);
-            glow.setStrokeWidth(4f * density);
+            // Match QS: blur a filled rounded shape to produce a soft outer halo.
+            glow.setStyle(Paint.Style.FILL);
             glow.setMaskFilter(new BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL));
             glow.setShader(new LinearGradient(0, 0, Math.max(1, width), 0,
                     mCardColorFirst, second, Shader.TileMode.CLAMP));
@@ -554,9 +592,24 @@ public class NotificationBackgroundView extends View implements Dumpable,
             boolean drewAxBlur = drawAxBlurBackground(canvas, mBackgroundBounds);
             if (mCardColorMode != 0 || shouldDrawFallbackBackground(drewAxBlur)) {
                 drawable.setBounds(left, top, right, bottom);
-                drawable.draw(canvas);
+                drawNeonClippedBackground(canvas, drawable, mBackgroundBounds);
             }
         }
+    }
+
+    /** Keep the neon tint inside the same outline used by the separate outer halo. */
+    private void drawNeonClippedBackground(Canvas canvas, Drawable drawable, Rect bounds) {
+        if ((mCardColorMode != 5 && mCardColorMode != 6) || drawable != mBackground
+                || bounds == null || bounds.isEmpty()) {
+            drawable.draw(canvas);
+            return;
+        }
+        Path cardShape = new Path();
+        cardShape.addRoundRect(new RectF(bounds), mCornerRadii, Path.Direction.CW);
+        int saveCount = canvas.save();
+        canvas.clipPath(cardShape);
+        drawable.draw(canvas);
+        canvas.restoreToCount(saveCount);
     }
 
     protected boolean drawAxBlurBackground(Canvas canvas, Rect bounds) {
@@ -777,7 +830,12 @@ public class NotificationBackgroundView extends View implements Dumpable,
             int first = mCardColorFirst;
             int second = (mCardColorMode == 2 || mCardColorMode == 4 || mCardColorMode == 6)
                     ? mCardColorSecond : mCardColorFirst;
-            if (customCardBlurAvailable()) {
+            if (mCardColorMode == 5 || mCardColorMode == 6) {
+                // Use the same restrained neon tint as QS; the cached halo and selected
+                // card style provide the glow and outline over this surface.
+                first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), (100 - mCardNeonTransparency) * 255 / 100) << 24);
+                second = (second & 0x00ffffff) | (Math.min(Color.alpha(second), (100 - mCardNeonTransparency) * 255 / 100) << 24);
+            } else if (customCardBlurAvailable()) {
                 first = (first & 0x00ffffff) | (Math.min(Color.alpha(first), 160) << 24);
                 second = (second & 0x00ffffff) | (Math.min(Color.alpha(second), 160) << 24);
             }

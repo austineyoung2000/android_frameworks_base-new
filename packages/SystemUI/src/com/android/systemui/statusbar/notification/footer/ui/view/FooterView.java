@@ -34,6 +34,11 @@ import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.IndentingPrintWriter;
 import android.view.View;
@@ -43,6 +48,8 @@ import androidx.annotation.NonNull;
 
 import com.android.internal.graphics.ColorUtils;
 import com.android.systemui.common.shared.colors.SurfaceEffectColors;
+import com.android.systemui.Dependency;
+import com.android.systemui.tuner.TunerService;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
 import com.android.systemui.shade.ui.ShadeColors;
@@ -64,6 +71,11 @@ public class FooterView extends StackScrollerDecorView {
     private FooterViewButton mHistoryButton;
     private boolean mShouldBeHidden;
     private boolean mIsBlurSupported;
+    private final TunerService.Tunable mCardAppearanceTunable = (key, value) -> {
+        if (mClearAllButton != null && mSettingsButton != null && mHistoryButton != null) {
+            updateColors();
+        }
+    };
 
     // Footer label
     private TextView mSeenNotifsFooterTextView;
@@ -77,6 +89,37 @@ public class FooterView extends StackScrollerDecorView {
 
     public FooterView(Context context, AttributeSet attrs) {
         super(context, attrs);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        Dependency.get(TunerService.class).addTunable(mCardAppearanceTunable,
+                "system:notification_card_color_mode", "system:notification_card_color_first",
+                "system:notification_card_color_second", "system:notification_card_style",
+                "system:notification_card_glow_intensity", "system:notification_card_neon_transparency");
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        Dependency.get(TunerService.class).removeTunable(mCardAppearanceTunable);
+        super.onDetachedFromWindow();
+    }
+
+    private Drawable makeCardBackground(int first, int second) {
+        final float density = getResources().getDisplayMetrics().density;
+        GradientDrawable fill = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[] {first, second});
+        fill.setCornerRadius(20f * density);
+        int horizontalPadding = Math.round(20f * density);
+        fill.setPadding(horizontalPadding, 0, horizontalPadding, 0);
+        int verticalInset = Math.round(4f * density);
+        InsetDrawable content = new InsetDrawable(fill, 0, verticalInset, 0, verticalInset);
+        android.util.TypedValue highlight = new android.util.TypedValue();
+        int rippleColor = mContext.getTheme().resolveAttribute(
+                android.R.attr.colorControlHighlight, highlight, true)
+                ? highlight.data : 0x33ffffff;
+        return new RippleDrawable(ColorStateList.valueOf(rippleColor), content, null);
     }
 
     @Override
@@ -309,9 +352,9 @@ public class FooterView extends StackScrollerDecorView {
                 com.android.internal.R.color.materialColorOnSurface);
         // Same resource, separate drawables to prevent touch effects from showing on the wrong
         // button.
-        final Drawable clearAllBg = theme.getDrawable(R.drawable.notif_footer_btn_background);
-        final Drawable settingsBg = theme.getDrawable(R.drawable.notif_footer_btn_background);
-        final Drawable historyBg = theme.getDrawable(R.drawable.notif_footer_btn_background);
+        Drawable clearAllBg = theme.getDrawable(R.drawable.notif_footer_btn_background);
+        Drawable settingsBg = theme.getDrawable(R.drawable.notif_footer_btn_background);
+        Drawable historyBg = theme.getDrawable(R.drawable.notif_footer_btn_background);
         final @ColorInt int scHigh;
 
         if (!notificationFooterBackgroundTintOptimization()) {
@@ -344,14 +387,52 @@ public class FooterView extends StackScrollerDecorView {
             scHigh = 0;
         }
 
+        int colorMode = Settings.System.getIntForUser(mContext.getContentResolver(),
+                "notification_card_color_mode", 0, UserHandle.USER_CURRENT);
+        int cardStyle = colorMode == 0 ? Settings.System.getIntForUser(mContext.getContentResolver(),
+                "notification_card_style", 0, UserHandle.USER_CURRENT) : 0;
+        int buttonContentColor = onSurface;
+        int neonFirst = Color.MAGENTA;
+        int neonSecond = Color.BLUE;
+        int neonIntensity = Math.max(0, Math.min(100, Settings.System.getIntForUser(
+                mContext.getContentResolver(), "notification_card_glow_intensity", 60,
+                UserHandle.USER_CURRENT)));
+        int transparency = Math.max(0, Math.min(100, Settings.System.getIntForUser(
+                mContext.getContentResolver(), "notification_card_neon_transparency", 78,
+                UserHandle.USER_CURRENT)));
+        if (colorMode >= 1 && colorMode <= 6) {
+            int first = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    "notification_card_color_first", Color.MAGENTA, UserHandle.USER_CURRENT);
+            int second = (colorMode == 2 || colorMode == 4 || colorMode == 6) ? Settings.System.getIntForUser(
+                    mContext.getContentResolver(), "notification_card_color_second",
+                    Color.BLUE, UserHandle.USER_CURRENT) : first;
+            neonFirst = first;
+            neonSecond = second;
+            if (colorMode >= 5) {
+                first = ColorUtils.setAlphaComponent(first, Math.min(Color.alpha(first), (100 - transparency) * 255 / 100));
+                second = ColorUtils.setAlphaComponent(second, Math.min(Color.alpha(second), (100 - transparency) * 255 / 100));
+            }
+            clearAllBg = makeCardBackground(first, second);
+            settingsBg = makeCardBackground(first, second);
+            historyBg = makeCardBackground(first, second);
+            float brightness = (Color.luminance(first) + Color.luminance(second)) / 2f;
+            buttonContentColor = brightness > 0.5f ? Color.BLACK : Color.WHITE;
+        }
+
         mClearAllButton.setBackground(clearAllBg);
-        mClearAllButton.setTextColor(onSurface);
+        mClearAllButton.setTextColor(buttonContentColor);
+        mClearAllButton.setCardStyle(cardStyle);
+        mClearAllButton.setNeon(colorMode, neonFirst, neonSecond, neonIntensity);
 
         mSettingsButton.setBackground(settingsBg);
-        mSettingsButton.setCompoundDrawableTintList(ColorStateList.valueOf(onSurface));
+        mSettingsButton.setCompoundDrawableTintList(ColorStateList.valueOf(buttonContentColor));
+        mSettingsButton.setCardStyle(cardStyle);
+        mSettingsButton.setNeon(colorMode, neonFirst, neonSecond, neonIntensity);
 
         mHistoryButton.setBackground(historyBg);
-        mHistoryButton.setCompoundDrawableTintList(ColorStateList.valueOf(onSurface));
+        mHistoryButton.setCompoundDrawableTintList(ColorStateList.valueOf(buttonContentColor));
+        mHistoryButton.setCardStyle(cardStyle);
+        mHistoryButton.setNeon(colorMode, neonFirst, neonSecond, neonIntensity);
 
         mSeenNotifsFooterTextView.setTextColor(onSurface);
         mSeenNotifsFooterTextView.setCompoundDrawableTintList(ColorStateList.valueOf(onSurface));

@@ -20,13 +20,18 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:visibility="gone">
 
     <com.android.systemui.statusbar.AlphaOptimizedFrameLayout
         android:id="@+id/content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingTop="12dp">
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp">
 
         <TextView
             android:id="@+id/unlock_prompt_footer"
@@ -41,7 +46,9 @@
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:clipToPadding="false">
 
             <com.android.systemui.statusbar.notification.row.FooterViewButton
                 android:id="@+id/history_button"

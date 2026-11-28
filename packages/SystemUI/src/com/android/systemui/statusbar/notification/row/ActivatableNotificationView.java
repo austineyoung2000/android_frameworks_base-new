@@ -796,6 +796,15 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
 
     protected abstract View getContentView();
 
+    @Override
+    protected int getUnclippedHaloPadding() {
+        return mBackgroundNormal == null ? 0 : mBackgroundNormal.getGlowPadding();
+    }
+
+    void onBackgroundGlowChanged() {
+        updateClipping();
+    }
+
     public int calculateBgColor() {
         return calculateBgColor(true /* withTint */, true /* withOverRide */);
     }
