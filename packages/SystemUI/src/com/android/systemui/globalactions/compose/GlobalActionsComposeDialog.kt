@@ -66,7 +66,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -304,6 +303,7 @@ private data class PowerTileAppearance(
     val second: Color,
     val useBlur: Boolean,
     val glowIntensity: Int,
+    val neonTransparency: Int,
 )
 
 @Composable
@@ -322,7 +322,9 @@ private fun rememberPowerTileAppearance(): PowerTileAppearance {
             0xff0000ff.toInt(), UserHandle.USER_CURRENT))
         val glow = Settings.System.getIntForUser(resolver, "power_menu_glow_intensity", 60,
             UserHandle.USER_CURRENT).coerceIn(0, 100)
-        PowerTileAppearance(style, effect, first, second, effect in 3..4 && backdrop, glow)
+        val transparency = Settings.System.getIntForUser(resolver, "power_menu_neon_transparency", 78,
+            UserHandle.USER_CURRENT).coerceIn(0, 100)
+        PowerTileAppearance(if (effect == 0) style else 0, effect, first, second, effect in 3..4 && backdrop, glow, transparency)
     }
 }
 
@@ -331,13 +333,24 @@ private fun PowerTileAppearance.haloModifier(shape: RoundedCornerShape): Modifie
 
 private fun PowerTileAppearance.backgroundModifier(shape: RoundedCornerShape): Modifier {
     if (effect == 0) return Modifier.then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
-    val firstColor = if (effect in 5..6) lerp(first, Color.Black, 0.78f).copy(alpha = 1f)
+    val firstColor = if (effect in 5..6) first.copy(alpha = minOf(first.alpha, if (effect in 5..6) (100 - neonTransparency) / 100f else 0.22f))
         else if (useBlur) first.copy(alpha = minOf(first.alpha, 0.63f)) else first
     val last = if (effect == 2 || effect == 4 || effect == 6) second else first
-    val lastColor = if (effect in 5..6) lerp(last, Color.Black, 0.78f).copy(alpha = 1f)
+    val lastColor = if (effect in 5..6) last.copy(alpha = minOf(last.alpha, if (effect in 5..6) (100 - neonTransparency) / 100f else 0.22f))
         else if (useBlur) last.copy(alpha = minOf(last.alpha, 0.63f)) else last
     return neonGlowModifier(effect, first, second, glowIntensity, shape)
         .background(Brush.horizontalGradient(listOf(firstColor, lastColor)), shape)
+        .then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
+}
+
+/** A restrained panel tint keeps the actions readable while following the chosen palette. */
+private fun PowerTileAppearance.panelBackgroundModifier(shape: RoundedCornerShape): Modifier {
+    if (effect == 0) return Modifier
+    val last = if (effect == 2 || effect == 4 || effect == 6) second else first
+    val colors = listOf(first.copy(alpha = minOf(first.alpha, if (effect in 5..6) (100 - neonTransparency) / 100f else 0.22f)),
+            last.copy(alpha = minOf(last.alpha, if (effect in 5..6) (100 - neonTransparency) / 100f else 0.22f)))
+    return neonGlowModifier(effect, first, second, glowIntensity, shape)
+        .background(Brush.horizontalGradient(colors), shape)
         .then(qsTileStyleModifier(style, STATE_ACTIVE, shape))
 }
 
@@ -706,18 +719,21 @@ private fun RestartChoiceMenu(
     onOptionSelected: (GlobalActionsDialogLite.Action) -> Unit,
     onBack: () -> Unit
 ) {
+    val appearance = rememberPowerTileAppearance()
+    val panelShape = RoundedCornerShape(32.dp)
     Surface(
         modifier = Modifier
             .width(340.dp)
             .padding(16.dp)
+            .then(appearance.haloModifier(panelShape))
             .pointerInput(Unit) { detectTapGestures { } },
-        shape = RoundedCornerShape(32.dp),
-        color = MaterialTheme.colorScheme.surface,
+        shape = panelShape,
+        color = if (appearance.effect == 0) MaterialTheme.colorScheme.surface else Color.Transparent,
         tonalElevation = 6.dp,
         shadowElevation = 8.dp
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.then(appearance.panelBackgroundModifier(panelShape)).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -828,6 +844,8 @@ private fun PowerMenuContainer(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val gridColumns = 4
+    val appearance = rememberPowerTileAppearance()
+    val panelShape = RoundedCornerShape(32.dp)
 
     if (isLandscape) {
         Box(
@@ -846,15 +864,16 @@ private fun PowerMenuContainer(
                     .width(340.dp)
                     .align(BiasAlignment(0f, animatedBias))
                     .padding(top = topPadding, start = 16.dp, end = 16.dp)
+                    .then(appearance.haloModifier(panelShape))
                     .pointerInput(Unit) { detectTapGestures { } }
                     .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessLow)),
-                shape = RoundedCornerShape(32.dp),
-                color = MaterialTheme.colorScheme.surface,
+                shape = panelShape,
+                color = if (appearance.effect == 0) MaterialTheme.colorScheme.surface else Color.Transparent,
                 tonalElevation = 6.dp,
                 shadowElevation = 8.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.then(appearance.panelBackgroundModifier(panelShape)).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     MenuHeader(isEditMode, onToggleEdit)
@@ -924,15 +943,16 @@ private fun PowerMenuContainer(
             modifier = Modifier
                 .width(340.dp)
                 .padding(16.dp)
+                .then(appearance.haloModifier(panelShape))
                 .pointerInput(Unit) { detectTapGestures { } }
                 .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessLow)),
-            shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface,
+            shape = panelShape,
+            color = if (appearance.effect == 0) MaterialTheme.colorScheme.surface else Color.Transparent,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.then(appearance.panelBackgroundModifier(panelShape)).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 MenuHeader(isEditMode, onToggleEdit)
@@ -982,6 +1002,12 @@ private fun PowerMenuContainer(
 
 @Composable
 private fun MenuHeader(isEditMode: Boolean, onToggleEdit: () -> Unit) {
+    val appearance = rememberPowerTileAppearance()
+    val editShape = RoundedCornerShape(50)
+    val nativeBackground = if (isEditMode) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.surfaceVariant
+    val nativeContent = if (isEditMode) MaterialTheme.colorScheme.onPrimary
+        else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -996,9 +1022,15 @@ private fun MenuHeader(isEditMode: Boolean, onToggleEdit: () -> Unit) {
         
         IconButton(
             onClick = onToggleEdit,
+            modifier = Modifier.then(if (appearance.effect in 5..6) Modifier.padding(8.dp)
+                    else Modifier)
+                .then(appearance.haloModifier(editShape))
+                .then(if (appearance.effect == 0) Modifier.background(nativeBackground, editShape)
+                    else Modifier)
+                .then(appearance.backgroundModifier(editShape)),
             colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = if(isEditMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = if(isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                containerColor = Color.Transparent,
+                contentColor = appearance.contentColor(nativeContent)
             )
         ) {
             Icon(
