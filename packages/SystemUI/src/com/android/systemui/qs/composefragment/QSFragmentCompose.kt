@@ -132,6 +132,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
@@ -242,7 +244,11 @@ import com.android.systemui.qs.panels.shared.model.SectionConfig
 import com.android.systemui.qs.panels.shared.model.SectionType
 import com.android.systemui.qs.panels.shared.model.QSLayoutItem
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.FullScreenTilePicker
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQsTileBlurVisible
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonHaloModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.neonGlowModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalCollapsedRows
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSCompactMode
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalTileDragHandler
@@ -596,7 +602,14 @@ constructor(
                                 .thenIf(viewModel.showingMirror) { Modifier.gesturesDisabled() }
                                 .graphicsLayer { alpha = pickerHiddenAlpha }
                         ) {
-                            CollapsableQuickSettingsSTL(oneUiTileStore)
+                            CompositionLocalProvider(
+                                LocalQsTileBlurVisible provides
+                                    (viewModel.isQsVisibleAndAnyShadeExpanded &&
+                                        !viewModel.showingMirror &&
+                                        viewModel.panelExpansionFraction >= 0.995f)
+                            ) {
+                                CollapsableQuickSettingsSTL(oneUiTileStore)
+                            }
                         }
 
                         AnimatedVisibility(
@@ -1272,6 +1285,34 @@ constructor(
     @Composable
     private fun ContentScope.QuickSettingsElement(oneUiTileStore: OneUiTileStore, modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
+        val actionColors = rememberCustomLabelColors()
+        val actionColor = actionColors.inactiveBackground ?: actionColors.activeBackground
+        val actionEndColor = if (actionColors.inactiveBackground != null)
+            actionColors.inactiveGradientEnd else actionColors.activeGradientEnd
+        val useInactiveAction = actionColors.inactiveBackground != null
+        val actionEffect = if (useInactiveAction) actionColors.inactiveEffect else actionColors.activeEffect
+        val actionGlowIntensity = if (useInactiveAction) actionColors.inactiveGlowIntensity
+            else actionColors.activeGlowIntensity
+        val actionNeon = actionColor != null && actionEffect in 5..6
+        val actionTransparency = if (useInactiveAction) actionColors.inactiveNeonTransparency
+            else actionColors.activeNeonTransparency
+        val actionOpacity = (100 - actionTransparency.coerceIn(0, 100)) / 100f
+        val actionShape = RoundedCornerShape(50)
+        val actionHalo = neonHaloModifier(actionEffect, actionColor, actionEndColor,
+            actionGlowIntensity, actionShape)
+        val actionGlow = neonGlowModifier(actionEffect, actionColor, actionEndColor,
+            actionGlowIntensity, actionShape)
+        val actionBrush = actionColor?.let { start ->
+            val first = if (actionNeon) start.copy(alpha = minOf(start.alpha, actionOpacity)) else start
+            val end = if (actionNeon) actionEndColor?.copy(alpha = minOf(actionEndColor.alpha, actionOpacity))
+                else actionEndColor
+            if (end != null) Brush.horizontalGradient(listOf(first, end)) else SolidColor(first)
+        }
+        val actionIconTint = actionColor?.let { start ->
+            val luminance = if (actionEndColor == null) start.luminance()
+                else (start.luminance() + actionEndColor.luminance()) / 2f
+            if (luminance > 0.5f) Color.Black else Color.White
+        }
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -1408,21 +1449,28 @@ constructor(
                                     if (!isEditingSections) {
                                         FooterActions(
                                             viewModel = viewModel.footerActionsViewModel,
+                                            actionButtonBrush = actionBrush,
+                                            actionButtonIconColor = actionIconTint,
+                                            actionButtonNeon = actionNeon,
+                                            actionButtonHalo = actionHalo,
+                                            actionButtonGlow = actionGlow,
                                         )
 
                                         val backgroundColor = LocalAndroidColorScheme.current.surfaceEffect1
-                                        val iconTint = MaterialTheme.colorScheme.onSurface
+                                        val iconTint = actionIconTint ?: MaterialTheme.colorScheme.onSurface
 
                                         Box(
                                             contentAlignment = Alignment.Center,
                                             modifier = Modifier
                                                 .padding(horizontal = 4.dp)
                                                 .size(40.dp)
+                                                .then(actionHalo)
                                                 .clip(CircleShape)
                                                 .background(
-                                                    backgroundColor,
+                                                    actionBrush ?: SolidColor(backgroundColor),
                                                     CircleShape
                                                 )
+                                                .then(actionGlow)
                                                 .clickable(
                                                     interactionSource = remember { MutableInteractionSource() },
                                                     indication = null,
@@ -1591,6 +1639,11 @@ constructor(
                                                 ) {
                                                     OneUiInsideTileArea(
                                                         insideSpecs = insideTiles,
+                                                        maxVisibleTiles = if (!containerExpanded && !isEditingSections) {
+                                                            collapsedRows * 4
+                                                        } else {
+                                                            null
+                                                        },
                                                         allTilesMap = insideAllTilesMap,
                                                         isEditMode = false,
                                                         isDropTarget = isEditingSections && !isEditingOneUi &&
@@ -1834,6 +1887,7 @@ constructor(
                     if (isDraggingBrightness) alpha = 1f 
                 }) {
                     BrightnessSliderContainer(
+                        customizeAppearance = true,
                         viewModel =
                             viewModel.containerViewModel.brightnessSliderViewModel,
                         containerColors =

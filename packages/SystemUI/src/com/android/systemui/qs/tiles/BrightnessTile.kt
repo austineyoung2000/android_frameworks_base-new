@@ -62,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -78,6 +79,10 @@ import com.android.systemui.animation.Expandable
 import com.android.systemui.biometrics.Utils.toBitmap
 import com.android.systemui.brightness.domain.model.GammaBrightness
 import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
+import com.android.systemui.brightness.ui.compose.rememberBrightnessAppearance
+import com.android.systemui.brightness.ui.compose.brightnessAppearance
+import com.android.systemui.brightness.ui.compose.brightnessNeon
+import com.android.systemui.brightness.ui.compose.BrightnessAppearance
 import com.android.systemui.brightness.ui.viewmodel.Drag
 import com.android.systemui.common.shared.model.Icon as SysIcon
 import com.android.systemui.dagger.qualifiers.Background
@@ -226,6 +231,7 @@ fun BrightnessTileContent(
                     enabled = enabled,
                     painter = sliderPainter,
                     isVertical = true,
+                    customizeAppearance = true,
                 )
             }
 
@@ -286,6 +292,7 @@ fun BrightnessTileContent(
                     enabled = enabled,
                     painter = sliderPainter,
                     isVertical = false,
+                    customizeAppearance = true,
                 )
             }
 
@@ -323,8 +330,15 @@ fun TileGlassSliderCore(
     enabled: Boolean,
     painter: Painter,
     isVertical: Boolean,
+    customizeAppearance: Boolean = false,
 ) {
     val view = LocalView.current
+    val appearance = if (customizeAppearance) rememberBrightnessAppearance() else BrightnessAppearance()
+    val defaultFill = MaterialTheme.colorScheme.primary
+    val defaultTrack = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val sliderIconTint = appearance.fill?.let {
+        if (it.luminance() > 0.5f) Color.Black else Color.White
+    } ?: MaterialTheme.colorScheme.onPrimary
     var dragFraction by remember { mutableStateOf<Float?>(null) }
     val rawFraction = ((value - valueRange.start) /
             (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
@@ -352,8 +366,13 @@ fun TileGlassSliderCore(
                     }
                 }
             }
+            .then(Modifier.brightnessNeon(appearance, isVertical, defaultFill))
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .then(if (appearance.customized) {
+                Modifier.brightnessAppearance(appearance, fraction, isVertical, defaultFill, defaultTrack)
+            } else {
+                Modifier.background(defaultTrack)
+            })
             .pointerInput(enabled, isVertical, valueRange) {
                 if (!enabled) return@pointerInput
                 detectTapGestures { offset ->
@@ -409,13 +428,15 @@ fun TileGlassSliderCore(
         val fillFraction = if (totalDim > 0) fillDim / totalDim.toFloat() else 0f
 
         if (isVertical) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(fillFraction)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-            )
+            if (!appearance.customized) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(fillFraction)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                )
+            }
 
             Box(
                 modifier = Modifier
@@ -427,18 +448,20 @@ fun TileGlassSliderCore(
                 Icon(
                     painter = painter,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                    tint = sliderIconTint,
                     modifier = Modifier.size(20.dp),
                 )
             }
         } else {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxWidth(fillFraction)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-            )
+            if (!appearance.customized) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(fillFraction)
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                )
+            }
 
             Box(
                 modifier = Modifier
@@ -450,7 +473,7 @@ fun TileGlassSliderCore(
                 Icon(
                     painter = painter,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
+                    tint = sliderIconTint,
                     modifier = Modifier.size(20.dp),
                 )
             }

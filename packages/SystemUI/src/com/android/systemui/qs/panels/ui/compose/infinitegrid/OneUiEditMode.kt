@@ -132,6 +132,8 @@ fun OneUITileContainer(
         val columns = 4
         val contentPaddingV = 8.dp
         val contentPaddingH = 16.dp
+        // Reserve room for the outer neon halo before the collapsed grid is clipped.
+        val collapsedGlowPadding = 12.dp
 
         val availableWidth = totalWidth - (contentPaddingH * 2)
         val (naturalCellSize, rowGap, _) =
@@ -141,7 +143,7 @@ fun OneUITileContainer(
         val tilesH =
             (naturalCellSize * collapsedRows) + (rowGap * (collapsedRows - 1).coerceAtLeast(0))
 
-        val tileAreaH = tilesH + (contentPaddingV * 2) + 4.dp
+        val tileAreaH = tilesH + (contentPaddingV * 2) + 4.dp + (collapsedGlowPadding * 2)
         val collapsedH = tileAreaH + expandBarH
 
         val cornerRadius by animateDpAsState(
@@ -246,12 +248,20 @@ fun OneUITileContainer(
             ) {
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = contentPaddingH)
                         .then(
                             if (isExpanded) {
-                                Modifier.padding(vertical = contentPaddingV)
+                                Modifier.padding(
+                                    horizontal = contentPaddingH,
+                                    vertical = contentPaddingV,
+                                )
                             } else {
-                                Modifier.heightIn(max = tilesH).clipToBounds()
+                                // Clip extra rows without clipping the halo around visible tiles.
+                                // Keep the original grid width and row-height constraints inside.
+                                Modifier
+                                    .padding(horizontal = contentPaddingH - collapsedGlowPadding)
+                                    .heightIn(max = tilesH + collapsedGlowPadding * 2)
+                                    .clipToBounds()
+                                    .padding(collapsedGlowPadding)
                             }
                         )
                         .alpha(contentAlpha.value)
@@ -352,6 +362,7 @@ fun OneUIExpandBar(
 fun OneUiInsideTileArea(
     insideSpecs: List<TileSpec>,
     allTilesMap: Map<TileSpec, QSTile>,
+    maxVisibleTiles: Int? = null,
     isEditMode: Boolean,
     containerBounds: Rect,
     onTileClick: (TileSpec, Expandable) -> Unit,
@@ -369,8 +380,10 @@ fun OneUiInsideTileArea(
     animateSize: Boolean = true,
 ) {
 
-    val floatingTiles = remember(insideSpecs) {
-        insideSpecs.map { spec -> FloatingTile(spec, SectionType.TILES, 1, 1) }
+    val floatingTiles = remember(insideSpecs, maxVisibleTiles) {
+        // Extra rows must not draw into the padding reserved for the visible tiles' halo.
+        val visibleSpecs = maxVisibleTiles?.let { insideSpecs.take(it) } ?: insideSpecs
+        visibleSpecs.map { spec -> FloatingTile(spec, SectionType.TILES, 1, 1) }
     }
 
     if (floatingTiles.isEmpty() && !isEditMode && !isDropTarget) return

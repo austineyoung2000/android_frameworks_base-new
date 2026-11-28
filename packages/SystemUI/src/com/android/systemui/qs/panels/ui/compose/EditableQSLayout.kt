@@ -156,10 +156,12 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.EditModeTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberCustomLabelColors
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileUsesBlur
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileUsesNeon
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonHaloModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileNeonModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileBackgroundModifier
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileStyleModifier
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.qsTileSelectedStyle
 import com.android.systemui.qs.panels.ui.viewmodel.EditTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.SectionEditModeViewModel
 import com.android.systemui.qs.pipeline.domain.model.TileModel
@@ -1962,6 +1964,7 @@ fun DraggableTile(
         else -> null
     }
     val customTileBlur = qsTileUsesBlur(customTileColors, visualState)
+    val customTileNeon = qsTileUsesNeon(customTileColors, visualState)
     val customIconColor = when (visualState) {
         Tile.STATE_ACTIVE -> customTileColors.activeIcon
         Tile.STATE_INACTIVE -> customTileColors.inactiveIcon
@@ -2002,7 +2005,7 @@ fun DraggableTile(
     } else {
         RoundedCornerShape(percent = 50) 
     }
-    val expandableColor = if (customTileBlur) {
+    val expandableColor = if (customTileBlur || customTileNeon) {
         Color.Transparent
     } else if (useAospStyle) {
         if (isActive) MaterialTheme.colorScheme.primary else EditModeTileDefaults.editTileColors().background
@@ -2118,7 +2121,7 @@ fun DraggableTile(
                         ) else Modifier
                     ),
                 shape = RoundedCornerShape(InactiveCornerRadius),
-                color = if (customTileBlur) Color.Transparent else aospBackground,
+                color = if (customTileBlur || customTileNeon) Color.Transparent else aospBackground,
                 shadowElevation = if (isResizing) 0.dp else elevation,
             ) {
                 Column(
@@ -2127,7 +2130,7 @@ fun DraggableTile(
                         .then(qsTileNeonModifier(customTileColors, visualState, RoundedCornerShape(InactiveCornerRadius)))
                         .then(qsTileBackgroundModifier(customTileColors, visualState, RoundedCornerShape(InactiveCornerRadius)))
                         .then(qsTileStyleModifier(
-                            customTileColors.tileStyle, visualState, RoundedCornerShape(InactiveCornerRadius)
+                            qsTileSelectedStyle(customTileColors, visualState), visualState, RoundedCornerShape(InactiveCornerRadius)
                         ))
                         .combinedClickable(
                             enabled = !isEditMode && interactionsEnabled,
@@ -2249,7 +2252,7 @@ fun DraggableTile(
                                 modifier = Modifier.fillMaxSize()
                                     .clip(RoundedCornerShape(percent = 50))
                                     .then(qsTileStyleModifier(
-                                        customTileColors.tileStyle, visualState,
+                                        qsTileSelectedStyle(customTileColors, visualState), visualState,
                                         RoundedCornerShape(percent = 50)
                                     ))
                                     .combinedClickable(

@@ -16,11 +16,24 @@
 
 package com.android.systemui.shade.ui.composable
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -31,6 +44,7 @@ import com.android.systemui.shade.ui.ShadeColors
 /** Scrim for QS/Shade, this will fill the max size, so it should be inside a Box like layout. */
 @Composable
 fun ContentScope.ShadePanelScrim(isTransparencyEnabled: Boolean, modifier: Modifier = Modifier) {
+    val transparency = rememberQsBackgroundTransparency()
     // This is the background for the whole scene, as the elements don't necessarily provide
     // a background that extends to the edges.
     Spacer(
@@ -38,12 +52,44 @@ fun ContentScope.ShadePanelScrim(isTransparencyEnabled: Boolean, modifier: Modif
             modifier
                 .element(Shade.Elements.BackgroundScrim)
                 .fillMaxSize()
-                .background(color = scrimColor(isTransparencyEnabled))
+                .background(color = scrimColor(isTransparencyEnabled).let {
+                    it.copy(alpha = it.alpha * (100 - transparency) / 100f)
+                })
     )
 }
 
+/** User transparency for shade background layers, excluding cards and tile content. */
 @Composable
-@ReadOnlyComposable
+internal fun rememberQsBackgroundTransparency(): Int {
+    val context = LocalContext.current
+    val resolver = context.contentResolver
+    fun readTransparency() = Settings.System.getIntForUser(
+        resolver, "qs_background_transparency", 0, UserHandle.USER_CURRENT
+    ).coerceIn(0, 100)
+    var transparency by remember(context) { mutableIntStateOf(readTransparency()) }
+    DisposableEffect(context) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { transparency = readTransparency() }
+        }
+        resolver.registerContentObserver(Settings.System.getUriFor("qs_background_transparency"),
+            false, observer, UserHandle.USER_ALL)
+        val userSwitch = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                transparency = readTransparency()
+            }
+        }
+        context.registerReceiverForAllUsers(userSwitch, IntentFilter(Intent.ACTION_USER_SWITCHED),
+            null, Handler(Looper.getMainLooper()), Context.RECEIVER_NOT_EXPORTED)
+        transparency = readTransparency()
+        onDispose {
+            resolver.unregisterContentObserver(observer)
+            context.unregisterReceiver(userSwitch)
+        }
+    }
+    return transparency
+}
+
+@Composable
 private fun scrimColor(isTransparencyEnabled: Boolean): Color {
     // Read configuration to invalidate on changes
     LocalConfiguration.current
