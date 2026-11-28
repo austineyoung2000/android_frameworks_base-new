@@ -19,6 +19,18 @@
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import android.content.Context
+import android.view.View
+import android.view.CrossWindowBlurListeners
+import com.android.internal.graphics.drawable.BackgroundBlurDrawable
+import java.util.function.Consumer
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import android.content.res.Resources
 import android.os.Trace
 import android.service.quicksettings.Tile.STATE_ACTIVE
@@ -28,6 +40,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
@@ -50,26 +63,37 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -204,7 +228,28 @@ fun ContentScope.Tile(
                 tile.state.collect { value = it.toIconProvider() }
             }
 
-        val colors = TileDefaults.getColorForState(uiState, iconOnly)
+        val defaultColors = TileDefaults.getColorForState(uiState, iconOnly)
+        val labelColors = rememberCustomLabelColors()
+        val customLabel = when (uiState.visualState) {
+            STATE_ACTIVE -> labelColors.active
+            STATE_INACTIVE -> labelColors.inactive
+            else -> null
+        }
+        val customSecondaryLabel = when (uiState.visualState) {
+            STATE_ACTIVE -> labelColors.activeSecondary
+            STATE_INACTIVE -> labelColors.inactiveSecondary
+            else -> null
+        }
+        val customIcon = when (uiState.visualState) {
+            STATE_ACTIVE -> labelColors.activeIcon
+            STATE_INACTIVE -> labelColors.inactiveIcon
+            else -> null
+        }
+        val colors = defaultColors.copy(
+            icon = customIcon ?: defaultColors.icon,
+            label = if (iconOnly) defaultColors.label else customLabel ?: defaultColors.label,
+            secondaryLabel = if (iconOnly) defaultColors.secondaryLabel else customSecondaryLabel ?: defaultColors.secondaryLabel,
+        )
         val hapticsViewModel: TileHapticsViewModel =
             rememberViewModel(traceName = "TileHapticsViewModel") {
                 tileHapticsViewModelFactory.create(tile)
@@ -222,7 +267,18 @@ fun ContentScope.Tile(
             }
         }
         
-        val tileShape by TileDefaults.animateTileShapeAsState(state = uiState.visualState, iconOnly = iconOnly)
+        val stockTileShape by TileDefaults.animateTileShapeAsState(
+            state = uiState.visualState, iconOnly = iconOnly
+        )
+        val tileShape = when (labelColors.tileShape) {
+            1 -> RoundedCornerShape(0.dp)
+            2 -> RoundedCornerShape(14.dp)
+            3 -> RoundedCornerShape(
+                topStart = 24.dp, topEnd = 2.dp, bottomEnd = 24.dp, bottomStart = 2.dp
+            )
+            4 -> RoundedCornerShape(50)
+            else -> stockTileShape
+        }
         val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
 
         val surfaceRevealModifier: Modifier
@@ -255,7 +311,7 @@ fun ContentScope.Tile(
         }
 
         TileExpandable(
-            color = { animatedColor },
+            color = { if (qsTileUsesBlur(labelColors, uiState.visualState)) Color.Transparent else animatedColor },
             shape = tileShape,
             squishiness = if (iconOnly) { { 1f } } else squishiness,
             hapticsViewModel = hapticsViewModel,
@@ -331,7 +387,10 @@ fun ContentScope.Tile(
                 accessibilityUiState = uiState.accessibilityUiState,
                 iconOnly = iconOnly,
                 isDualTarget = uiState.handlesToggleClick,
-                modifier = contentRevealModifier,
+                modifier = contentRevealModifier
+                    .then(qsTileBackgroundModifier(labelColors, uiState.visualState, tileShape))
+                    .then(qsTileStyleModifier(labelColors.tileStyle, uiState.visualState, tileShape))
+                    .then(qsTileNeonModifier(labelColors, uiState.visualState, tileShape)),
             ) {
                 val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
                 if (iconOnly) {
@@ -481,6 +540,334 @@ data class TileColors(
     val secondaryLabel: Color,
     val icon: Color,
 )
+
+internal data class CustomLabelColors(
+    val active: Color?,
+    val inactive: Color?,
+    val activeSecondary: Color?,
+    val inactiveSecondary: Color?,
+    val activeIcon: Color?,
+    val inactiveIcon: Color?,
+    val tileShape: Int,
+    val tileStyle: Int,
+    val activeBackground: Color?,
+    val activeGradientEnd: Color?,
+    val inactiveBackground: Color?,
+    val inactiveGradientEnd: Color?,
+    val activeEffect: Int,
+    val inactiveEffect: Int,
+    val activeGlowIntensity: Int,
+    val inactiveGlowIntensity: Int,
+)
+
+@Composable
+internal fun rememberCustomLabelColors(): CustomLabelColors {
+    val context = LocalContext.current
+    val resolver = context.contentResolver
+    fun readColors(): CustomLabelColors {
+        fun color(enabledKey: String, colorKey: String, fallback: Int): Color? {
+            val enabled = Settings.System.getIntForUser(
+                resolver, enabledKey, 0, UserHandle.USER_CURRENT
+            ) != 0
+            return if (enabled) Color(Settings.System.getIntForUser(
+                resolver, colorKey, fallback, UserHandle.USER_CURRENT
+            )) else null
+        }
+        fun rawColor(key: String, fallback: Int) = Color(Settings.System.getIntForUser(resolver, key, fallback, UserHandle.USER_CURRENT))
+        fun effect(kind: String): Int {
+            val configured = Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_effect", -1, UserHandle.USER_CURRENT)
+            if (configured in 0..6) return configured
+            if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_background_color_enabled", 0, UserHandle.USER_CURRENT) == 0) return 0
+            return if (Settings.System.getIntForUser(resolver, "qs_" + kind + "_gradient_enabled", 0, UserHandle.USER_CURRENT) != 0) 2 else 1
+        }
+        return CustomLabelColors(
+            active = color("qs_active_label_color_enabled", "qs_active_label_color", 0xff000000.toInt()),
+            inactive = color("qs_inactive_label_color_enabled", "qs_inactive_label_color", 0xffffffff.toInt()),
+            activeSecondary = color(
+                "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
+                0xff000000.toInt()
+            ),
+            inactiveSecondary = color(
+                "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
+                0xffffffff.toInt()
+            ),
+            activeIcon = color("qs_active_icon_color_enabled", "qs_active_icon_color", 0xffffffff.toInt()),
+            inactiveIcon = color("qs_inactive_icon_color_enabled", "qs_inactive_icon_color", 0xffffffff.toInt()),
+            tileShape = Settings.System.getIntForUser(
+                resolver, "qs_tile_shape", 0, UserHandle.USER_CURRENT
+            ),
+            tileStyle = Settings.System.getIntForUser(
+                resolver, "qs_compose_tile_style", 0, UserHandle.USER_CURRENT
+            ),
+            activeBackground = if (effect("active") == 0) null else rawColor("qs_active_background_color", 0xff6200ee.toInt()),
+            activeGradientEnd = if (effect("active") in listOf(2, 4, 6)) rawColor("qs_active_gradient_end_color", 0xff0000ff.toInt()) else null,
+            inactiveBackground = if (effect("inactive") == 0) null else rawColor("qs_inactive_background_color", 0xff55555f.toInt()),
+            inactiveGradientEnd = if (effect("inactive") in listOf(2, 4, 6)) rawColor("qs_inactive_gradient_end_color", 0xff0000ff.toInt()) else null,
+            activeEffect = effect("active"),
+            inactiveEffect = effect("inactive"),
+            activeGlowIntensity = Settings.System.getIntForUser(resolver, "qs_active_glow_intensity", 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
+            inactiveGlowIntensity = Settings.System.getIntForUser(resolver, "qs_inactive_glow_intensity", 60, UserHandle.USER_CURRENT).coerceIn(0, 100),
+        )
+    }
+    val colors = remember(context) { mutableStateOf(readColors()) }
+    DisposableEffect(context) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                colors.value = readColors()
+            }
+        }
+        listOf(
+            "qs_active_label_color_enabled", "qs_active_label_color",
+            "qs_inactive_label_color_enabled", "qs_inactive_label_color",
+            "qs_active_secondary_label_color_enabled", "qs_active_secondary_label_color",
+            "qs_inactive_secondary_label_color_enabled", "qs_inactive_secondary_label_color",
+            "qs_active_icon_color_enabled", "qs_active_icon_color",
+            "qs_inactive_icon_color_enabled", "qs_inactive_icon_color",
+            "qs_tile_shape", "qs_compose_tile_style",
+            "qs_active_background_effect", "qs_inactive_background_effect",
+            "qs_active_glow_intensity", "qs_inactive_glow_intensity",
+            "qs_active_background_color_enabled", "qs_active_background_color",
+            "qs_active_gradient_enabled", "qs_active_gradient_end_color",
+            "qs_inactive_background_color_enabled", "qs_inactive_background_color",
+            "qs_inactive_gradient_enabled", "qs_inactive_gradient_end_color",
+        ).forEach { key ->
+            resolver.registerContentObserver(
+                Settings.System.getUriFor(key), false, observer, UserHandle.USER_ALL
+            )
+        }
+        val userReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                colors.value = readColors()
+            }
+        }
+        context.registerReceiver(userReceiver, IntentFilter(Intent.ACTION_USER_SWITCHED))
+        colors.value = readColors()
+        onDispose {
+            resolver.unregisterContentObserver(observer)
+            context.unregisterReceiver(userReceiver)
+        }
+    }
+    return colors.value
+}
+
+/**
+ * Draw custom fills inside the tile's existing shape and beneath its style and content.
+ * Disabled and unavailable tiles retain the colors selected by SystemUI.
+ */
+
+// The QS host can remain composed after the shade closes. Do not retain blur regions then.
+internal val LocalQsTileBlurVisible = staticCompositionLocalOf { false }
+
+internal fun qsTileUsesBlur(settings: CustomLabelColors, state: Int): Boolean =
+    when (state) {
+        STATE_ACTIVE -> settings.activeEffect in 3..4
+        STATE_INACTIVE -> settings.inactiveEffect in 3..4
+        else -> false
+    }
+
+@Composable
+internal fun qsTileBackgroundModifier(
+    settings: CustomLabelColors,
+    state: Int,
+    shape: RoundedCornerShape,
+): Modifier {
+    val start = when (state) {
+        STATE_ACTIVE -> settings.activeBackground
+        STATE_INACTIVE -> settings.inactiveBackground
+        else -> null
+    }
+    val end = when (state) {
+        STATE_ACTIVE -> settings.activeGradientEnd
+        STATE_INACTIVE -> settings.inactiveGradientEnd
+        else -> null
+    }
+    val wantsBlur = start != null && qsTileUsesBlur(settings, state) && LocalQsTileBlurVisible.current
+    val view = LocalView.current
+    var blur by remember(view) { mutableStateOf<BackgroundBlurDrawable?>(null) }
+    var blurSupported by remember(view) { mutableStateOf(false) }
+    DisposableEffect(view, wantsBlur) {
+        val listeners = CrossWindowBlurListeners.getInstance()
+        var disposed = false
+        var ownedBlur: BackgroundBlurDrawable? = null
+
+        fun releaseBlur() {
+            val old = ownedBlur ?: return
+            ownedBlur = null
+            // Remove the region from the window aggregator before the composable disappears.
+            old.setVisible(false, false)
+            old.setBlurRadius(0)
+            if (blur === old) blur = null
+        }
+
+        fun updateSupport(enabled: Boolean) {
+            if (disposed) return
+            blurSupported = enabled
+            ownedBlur?.setVisible(enabled && wantsBlur && view.isAttachedToWindow, false)
+        }
+
+        val callback = Consumer<Boolean> { updateSupport(it) }
+        val attachment = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                if (disposed || !wantsBlur || ownedBlur != null) return
+                val created = v.viewRootImpl?.createBackgroundBlurDrawable() ?: return
+                // Start hidden: a tile may be detached or the shade closed before its first draw.
+                created.setVisible(false, false)
+                created.setBlurRadius(v.resources.getDimensionPixelSize(
+                    R.dimen.notification_background_blur_radius
+                ))
+                created.setColor(android.graphics.Color.TRANSPARENT)
+                ownedBlur = created
+                blur = created
+                updateSupport(listeners.isCrossWindowBlurEnabled)
+            }
+
+            override fun onViewDetachedFromWindow(v: View) {
+                releaseBlur()
+            }
+        }
+        if (wantsBlur) {
+            listeners.addListener(view.context.mainExecutor, callback)
+            view.addOnAttachStateChangeListener(attachment)
+            if (view.isAttachedToWindow) attachment.onViewAttachedToWindow(view)
+            updateSupport(listeners.isCrossWindowBlurEnabled)
+        }
+        onDispose {
+            disposed = true
+            if (wantsBlur) {
+                listeners.removeListener(callback)
+                view.removeOnAttachStateChangeListener(attachment)
+            }
+            releaseBlur()
+        }
+    }
+    if (start == null) return Modifier
+    val currentBlur = blur
+    val activeBlur = wantsBlur && blurSupported && currentBlur != null
+    return Modifier.drawBehind {
+        var drewBlur = false
+        if (activeBlur) {
+            drawIntoCanvas { canvas ->
+                val drawable = currentBlur ?: return@drawIntoCanvas
+                if (canvas.nativeCanvas.isHardwareAccelerated && drawable.isVisible) {
+                    val outline = shape.createOutline(size, layoutDirection, this)
+                    if (outline is Outline.Rectangle) {
+                        drawable.setCornerRadius(0f)
+                        drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
+                        drawable.draw(canvas.nativeCanvas)
+                        drewBlur = true
+                    } else if (outline is Outline.Rounded) {
+                        val rr = outline.roundRect
+                        drawable.setCornerRadius(
+                            rr.topLeftCornerRadius.x, rr.topLeftCornerRadius.y,
+                            rr.topRightCornerRadius.x, rr.topRightCornerRadius.y,
+                            rr.bottomLeftCornerRadius.x, rr.bottomLeftCornerRadius.y,
+                            rr.bottomRightCornerRadius.x, rr.bottomRightCornerRadius.y,
+                        )
+                        drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
+                        drawable.draw(canvas.nativeCanvas)
+                        drewBlur = true
+                    }
+                }
+            }
+        }
+        val effect = if (state == STATE_ACTIVE) settings.activeEffect else settings.inactiveEffect
+        val first = if (effect in 5..6) start.copy(alpha = minOf(start.alpha, 0.22f))
+            else if (drewBlur) start.copy(alpha = minOf(start.alpha, 0.63f)) else start
+        val last = if (effect in 5..6) end?.copy(alpha = minOf(end.alpha, 0.22f))
+            else if (drewBlur) end?.copy(alpha = minOf(end.alpha, 0.63f)) else end
+        if (last != null) drawRect(brush = Brush.horizontalGradient(listOf(first, last)))
+        else drawRect(color = first)
+    }
+}
+
+/** Inset layered neon edges remain inside the tile clip and follow its current shape. */
+internal fun neonGlowModifier(
+    effect: Int,
+    first: Color?,
+    second: Color?,
+    intensity: Int,
+    shape: RoundedCornerShape,
+): Modifier {
+    if (effect !in 5..6 || first == null || intensity <= 0) return Modifier
+    val strength = intensity.coerceIn(0, 100) / 100f
+    val end = if (effect == 6) second ?: first else first
+    return Modifier.drawWithContent {
+        drawContent()
+        val outline = shape.createOutline(size, layoutDirection, this)
+        val path = Path()
+        when (outline) {
+            is Outline.Rounded -> path.addRoundRect(outline.roundRect)
+            is Outline.Rectangle -> path.addRect(outline.rect)
+            is Outline.Generic -> path.addPath(outline.path)
+        }
+        for (layer in 5 downTo 1) {
+            val width = (layer * 2f).dp.toPx()
+            val alpha = strength * if (layer == 1) 0.9f else 0.10f
+            val brush = Brush.horizontalGradient(listOf(first.copy(alpha = alpha), end.copy(alpha = alpha)))
+            drawPath(path = path, brush = brush, style = Stroke(width))
+        }
+    }
+}
+
+internal fun qsTileNeonModifier(settings: CustomLabelColors, state: Int, shape: RoundedCornerShape): Modifier =
+    when (state) {
+        STATE_ACTIVE -> neonGlowModifier(settings.activeEffect, settings.activeBackground,
+            settings.activeGradientEnd, settings.activeGlowIntensity, shape)
+        STATE_INACTIVE -> neonGlowModifier(settings.inactiveEffect, settings.inactiveBackground,
+            settings.inactiveGradientEnd, settings.inactiveGlowIntensity, shape)
+        else -> Modifier
+    }
+
+internal fun qsTileStyleModifier(
+    style: Int,
+    state: Int,
+    shape: RoundedCornerShape,
+): Modifier {
+    if (style !in 1..7) return Modifier
+    val active = state == STATE_ACTIVE
+    val edge = if (active) Color.White.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.3f)
+    val styled = Modifier.drawWithContent {
+        when (style) {
+            // Reflected: soft shine across the upper part of the tile.
+            2 -> drawRect(Brush.verticalGradient(
+                0f to Color.White.copy(alpha = 0.32f),
+                0.48f to Color.White.copy(alpha = 0.03f),
+                1f to Color.Transparent
+            ))
+            // Shaded: darken the upper edge.
+            3 -> drawRect(Brush.verticalGradient(
+                listOf(Color.Black.copy(alpha = 0.25f), Color.Transparent)
+            ))
+            // Neumorph: opposing highlights and shadows.
+            5 -> drawRect(Brush.linearGradient(
+                listOf(Color.White.copy(alpha = 0.26f), Color.Transparent,
+                    Color.Black.copy(alpha = 0.22f))
+            ))
+            // CyberPunk: contrasting bands on opposite sides.
+            6 -> {
+                drawRect(Color.White.copy(alpha = 0.16f), size = Size(size.width * 0.55f, size.height))
+                drawRect(Color.Black.copy(alpha = 0.16f),
+                    topLeft = Offset(size.width * 0.58f, 0f),
+                    size = Size(size.width * 0.42f, size.height))
+            }
+            // Two-tone accent: a distinct second tone within the tile.
+            7 -> drawRect(Brush.horizontalGradient(
+                listOf(Color.White.copy(alpha = 0.16f), Color.Transparent,
+                    Color.Black.copy(alpha = 0.14f))
+            ))
+        }
+        drawContent()
+    }
+    return when (style) {
+        1 -> styled.border(2.dp, edge, shape)
+        2 -> styled.border(1.dp, edge.copy(alpha = 0.18f), shape)
+        3 -> styled
+        4 -> styled.border(1.dp, edge, shape)
+        5 -> styled.border(1.dp, edge.copy(alpha = 0.28f), shape)
+        6 -> styled.border(2.dp, edge, shape)
+        else -> styled
+    }
+}
 
 private object TileDefaults {
     val ActiveIconCornerRadius = ActiveCornerRadius
