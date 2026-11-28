@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -92,18 +93,15 @@ fun IslandGlassCard(
     secondaryActionColor: Color = GlassButtonFill,
     below: (@Composable () -> Unit)? = null,
 ) {
-    AxBlurSurface(
-        modifier =
-            modifier
-                .widthIn(min = 300.dp, max = 400.dp)
-                .pressScale(enabled = onClick != null, pressedScale = 0.97f) { onClick?.invoke() }
-                .border(width = 1.dp, brush = IslandGlassRim, shape = GlassCardShape),
-        shape = GlassCardShape,
-        cornerRadius = 28.dp,
-        surfaceColor = GlassNoBlurFill,
-        tintColor = GlassTint,
-    ) {
-        CompositionLocalProvider(LocalContentColor provides Color.White) {
+    val appearance = rememberDynamicPopupAppearance("status_bar_dynamic_island")
+    val useNative = appearance.mode == 0 && appearance.style == 0 && !appearance.outline
+    val end = if (appearance.dualColor) appearance.second else appearance.first
+    val contentColor = if (appearance.mode == 2 &&
+        (appearance.first.luminance() + end.luminance()) / 2f > .5f) Color.Black else Color.White
+    val cardModifier = modifier.widthIn(min = 300.dp, max = 400.dp)
+        .pressScale(enabled = onClick != null, pressedScale = 0.97f) { onClick?.invoke() }
+    val cardContent: @Composable () -> Unit = {
+        CompositionLocalProvider(LocalContentColor provides contentColor) {
             Column(
                 modifier =
                     Modifier.fillMaxWidth()
@@ -121,7 +119,7 @@ fun IslandGlassCard(
                             fontSize = 26.sp,
                             lineHeight = 30.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = contentColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -132,7 +130,7 @@ fun IslandGlassCard(
                                     text = it,
                                     fontSize = 14.sp,
                                     lineHeight = 18.sp,
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = contentColor.copy(alpha = 0.7f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -156,6 +154,29 @@ fun IslandGlassCard(
                 below?.invoke()
             }
         }
+    }
+    if (useNative) {
+        AxBlurSurface(
+            modifier = cardModifier.border(width = 1.dp, brush = IslandGlassRim,
+                shape = GlassCardShape),
+            shape = GlassCardShape, cornerRadius = 28.dp,
+            surfaceColor = GlassNoBlurFill, tintColor = GlassTint,
+        ) { cardContent() }
+    } else {
+        DynamicPopupSurface(
+            appearance = appearance,
+            shape = GlassCardShape,
+            modifier = cardModifier,
+            nativeBackground = {
+                AxBlurSurface(
+                    modifier = Modifier.matchParentSize().border(width = 1.dp,
+                        brush = IslandGlassRim, shape = GlassCardShape),
+                    shape = GlassCardShape, cornerRadius = 28.dp,
+                    surfaceColor = GlassNoBlurFill, tintColor = GlassTint,
+                ) {}
+            },
+            blurBackground = { PopupBlurBackground(Modifier.matchParentSize(), 28.dp) },
+        ) { cardContent() }
     }
 }
 

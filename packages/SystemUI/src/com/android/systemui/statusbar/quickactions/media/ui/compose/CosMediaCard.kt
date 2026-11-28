@@ -76,6 +76,7 @@ import com.android.systemui.media.controls.shared.model.MediaAction
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.quickactions.media.shared.model.MediaControlChipModel
 import com.android.systemui.statusbar.quickactions.ui.compose.PopupSurface
+import com.android.systemui.statusbar.quickactions.ui.compose.rememberDynamicPopupAppearance
 import com.android.systemui.statusbar.quickactions.ui.compose.rememberAlbumArtAccent
 import com.android.systemui.statusbar.quickactions.ui.compose.rememberCosArtTint
 import java.util.concurrent.ConcurrentHashMap
@@ -137,11 +138,14 @@ private fun rememberCosLottie(rawRes: Int): LottieComposition? {
 fun CosMediaCard(model: MediaControlChipModel, modifier: Modifier = Modifier) {
     val artwork = remember(model.artworkIcon) { (model.artworkIcon as? UiIcon.Loaded)?.drawable }
     val tint = rememberCosArtTint(artwork)
+    val appearance = rememberDynamicPopupAppearance("status_bar_dynamic_island")
     PopupSurface(
         shape = RoundedCornerShape(CosMediaCard.Corner),
         modifier = modifier.widthIn(min = 320.dp, max = 400.dp),
     ) {
-        CosMediaCardContent(model, artwork, Modifier.background(tint))
+        CosMediaCardContent(model, artwork,
+            if (appearance.mode == 0 && appearance.style == 0 && !appearance.outline)
+                Modifier.background(tint) else Modifier)
     }
 }
 

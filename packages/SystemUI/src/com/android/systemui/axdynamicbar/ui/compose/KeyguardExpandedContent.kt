@@ -91,6 +91,8 @@ import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.android.systemui.statusbar.quickactions.ui.compose.DynamicPopupSurface
+import com.android.systemui.statusbar.quickactions.ui.compose.rememberDynamicPopupAppearance
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.res.R
 import com.android.systemui.axdynamicbar.model.IslandEvent
@@ -202,15 +204,18 @@ private fun KeyguardPanelSurface(
     modifier: Modifier = Modifier.fillMaxWidth(),
     content: @Composable () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .widthIn(max = ExpandedMaxWidth)
-            .then(modifier)
-            .padding(horizontal = SpaceSection)
-            .clip(ShapeXl)
-            .border(1.dp, CardBorderBrush, ShapeXl),
+    val appearance = rememberDynamicPopupAppearance("ax_dynamic_bar")
+    DynamicPopupSurface(
+        appearance = appearance,
+        shape = ShapeXl,
+        modifier = Modifier.widthIn(max = ExpandedMaxWidth).then(modifier)
+            .padding(horizontal = if (appearance.mode in 3..4) 32.dp else SpaceSection,
+                vertical = if (appearance.mode in 3..4) 24.dp else 0.dp),
+        nativeBackground = {
+            AxBlurBackdrop(RadiusXl, CardBg, Modifier.matchParentSize())
+            Box(Modifier.matchParentSize().border(1.dp, CardBorderBrush, ShapeXl))
+        },
     ) {
-        AxBlurBackdrop(RadiusXl, CardBg, Modifier.matchParentSize())
         content()
     }
 }
